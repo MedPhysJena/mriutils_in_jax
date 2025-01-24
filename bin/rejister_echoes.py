@@ -130,10 +130,10 @@ class Registration:
 
 
 @click.command()
+@click.argument("output_base", type=click.Path(path_type=Path))
 @click.argument("input_magn", type=click.Path(path_type=Path))
 @click.argument("input_phase", type=click.Path(path_type=Path))
-@click.argument("input_header", type=click.Path(path_type=Path))
-@click.argument("output_base", type=click.Path(path_type=Path))
+@click.option("--input-header", type=click.Path(path_type=Path), default=None)
 @click.option(
     "--axis",
     type=int,
@@ -205,9 +205,13 @@ def main(
 ):
     output_base.parent.mkdir(exist_ok=True, parents=True)
 
-    with open(input_header) as f:
-        te_ms = jnp.array(json.load(f)["echoTime"])
-    necho = len(te_ms)
+    if input_header:
+        with open(input_header) as f:
+            te_ms = jnp.array(json.load(f)["echoTime"])
+    else:
+        if use_te:
+            raise ValueError("input_header must be specified if use_te is True")
+        te_ms = None
 
     if spatial_axes is not None:
         spatial_axes = jnp.array([int(a) for a in spatial_axes.split(",")], dtype=int)
