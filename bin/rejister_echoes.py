@@ -1,13 +1,13 @@
 import json
-from typing import Iterable
 from pathlib import Path
-from jaxtyping import Array, Float
+from typing import Iterable
 
 import click
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import nibabel as nib
-import jax.numpy as jnp
 from cycler import cycler
+from jaxtyping import Array, Float
 from scipy.ndimage import fourier_shift
 from skimage_in_jax.registration import phase_cross_correlation
 from tqdm import trange
