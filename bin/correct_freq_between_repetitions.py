@@ -150,6 +150,7 @@ def main(
         output_basename = moving_phase.parent / moving_phase.name.replace(
             nifti_suffix, "-corrected"
         )
+    output_basename.parent.mkdir(exist_ok=True, parents=True)
     output_phase = output_basename.with_suffix(nifti_suffix)
     output_coeff = output_basename.with_suffix(".coefs")
 
