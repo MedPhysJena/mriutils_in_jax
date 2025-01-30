@@ -12,6 +12,7 @@ from jaxtyping import Array, Complex, Float
 from loguru import logger
 from matplotlib.colors import Normalize, TwoSlopeNorm
 
+from mriutils_in_jax.loader import Loaded
 
 def grid_basis(
     grid_shape: tuple[int, ...], stacking_axis: int = -1
@@ -78,53 +79,6 @@ def parse_selection_from_string(sel: str = "") -> tuple[slice, ...]:
         ranges = [int(idx) if idx else None for idx in ranges]
         selection.append(slice(*ranges))
     return tuple(selection)
-
-
-class Loaded:
-    def __init__(
-        self,
-        path_magn: Path,
-        path_phase: Path,
-        axis_echo: int = -1,
-        selection: str = "",
-        check_phase: bool = True,
-    ):
-        self.sel = parse_selection_from_string(selection)
-        self.img = nib.nifti1.load(path_magn)
-        img_phase = nib.nifti1.load(path_phase)
-        if self.img.shape != img_phase.shape:
-            raise ValueError(
-                f"Incompatible shapes for magnitude {self.img.shape} "
-                f"and phase {img_phase.shape}"
-            )
-        magn = jnp.array(self.img.dataobj[*self.sel])
-        logger.info("Loaded magn.shape: {}", magn.shape)
-        if magn.ndim > 4:
-            raise NotImplementedError(
-                f"Batch dimensions are not yet supported, magn.shape = {magn.shape}"
-            )
-        logger.debug("Computing magnitude's 99th percentile")
-        self.scale = jnp.nanpercentile(magn, jnp.array(99))
-        self.magn = magn / self.scale
-        phase = jnp.array(img_phase.dataobj[*self.sel])
-        if check_phase:
-            # this is an expensive operation for large arrays, so may be worth skipping
-            logger.debug("Computing phase limits")
-            # below is ~ ×5 times faster than nanpercentile(x, [0, 100])
-            vlims = jnp.array([jnp.nanmin(phase), jnp.nanmax(phase)])
-            if not jnp.allclose(vlims, jnp.array([-jnp.pi, jnp.pi])):
-                raise ValueError(f"phase must be scaled to [-π,π], got {vlims}")
-        self.phase = phase
-
-        if axis_echo != -1:
-            logger.info("Moving axis_echo = {} to the end", axis_echo)
-            self.magn = jnp.swapaxes(self.magn, axis_echo, -1)
-            self.phase = jnp.swapaxes(self.phase, axis_echo, -1)
-        self.shape = magn.shape
-
-    @cached_property
-    def complex(self) -> Complex[Array, "*spatial echo"]:
-        return self.magn * jnp.exp(1j * self.phase)
 
 
 def predict_freq(
@@ -229,9 +183,23 @@ def main(
     with open(header) as f:
         te = jnp.array(json.load(f)["echoTime"])
     logger.debug("Loading the reference images")
-    ref = Loaded(reference_magn, reference_phase, axis_echo, sel, check_phase)
+    ref = Loaded(
+        reference_magn,
+        reference_phase,
+        axis_echo,
+        sel,
+        check_phase,
+        magn_scale="percentile",
+    )
     logger.debug("Loading the moving images")
-    moving = Loaded(moving_magn, moving_phase, axis_echo, sel, check_phase)
+    moving = Loaded(
+        moving_magn,
+        moving_phase,
+        axis_echo,
+        sel,
+        check_phase,
+        magn_scale="percentile",
+    )
     if ref.shape != moving.shape:
         raise ValueError(
             f"Incompatible shapes for the reference {ref.shape} "
