@@ -8,7 +8,7 @@ from scipy.ndimage import fourier_shift
 from yaslp.phantom import shepp_logan
 from yaslp.utils import grid_basis
 
-from mriutils_in_jax.register import register
+from mriutils_in_jax.register import register, fourier_shift as fourier_shift_jax
 
 PLOT = False
 NVOL = 5
@@ -25,34 +25,6 @@ def shifts():
     # _scaling_factor = onp.array([20, -5, 1])
     _scaling_factor = onp.array([1, -5, 20])
     return shift[:, None] / _scaling_factor
-
-
-def test_gen(shifts):
-    plt.plot(shifts)
-    plt.show()
-
-
-def fourier_shift_jax(
-    array: Float[Array, "..."],
-    shift: Float[Array, " ndim"],
-    axes: tuple[int, ...] | None = None,
-):
-    array = jnp.asarray(array)
-    shift = jnp.asarray(shift)
-    if axes is None:
-        axes = tuple(range(array.ndim))
-    batch_axes = tuple(a for a in range(array.ndim) if a not in axes)
-    assert len(axes) == len(shift)
-    shape = tuple(array.shape[a] for a in axes)
-
-    # Compute the frequency grid
-    phase_shift = grid_basis(shape, reciprocal=True, rfft=True) @ shift
-    # Apply Fourier shift theorem
-    return jnp.fft.irfftn(
-        jnp.fft.rfftn(array, axes=axes)
-        * jnp.expand_dims(jnp.exp(-2j * jnp.pi * phase_shift), batch_axes),
-        axes=axes,
-    )
 
 
 def shift_array(array, shift, axes=(0, 1, 2)):
