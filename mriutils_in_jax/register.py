@@ -37,11 +37,12 @@ def sos(
     return (array**2).sum(batch_axes, keepdims=keepdims) ** 0.5
 
 
-def register_pmap(
+def register(
     array: Float[Array, "axis ..."],
     ref: int = -1,
     axis: int = -1,
     upsample_factor: int = 100,
+    try_in_parallel: bool = True,
 ) -> Float[Array, "..."]:
     """Register subvolumes along specified axis.
 
@@ -54,6 +55,12 @@ def register_pmap(
     axis : int, default = -1
         Axis which will be subdivided and each subvolume along this axis
         will be registered against array.take(ref, axis)
+    try_in_parallel: bool, default is True
+        If True and the number of available devices is greater than the number of
+        subvolumes to register, will attempt to register each on a separate device.
+        Otherwise vectorises the computation over a single available device.
+        By default JAX consider a CPU as a singe device. In order to parallelise over
+        CPU cores, set 'XLA_FLAGS="--xla_force_host_platform_device_count=1"'
     """
     ref = array.take(ref, axis)
     axis = axis % array.ndim  # pmap requires non-negative integers 🤷
@@ -61,4 +68,9 @@ def register_pmap(
     def register_single_vol(moving: Float[Array, "..."]) -> Float[Array, " ndim"]:
         return phase_cross_correlation(ref, moving, upsample_factor=upsample_factor)[0]
 
-    return jax.pmap(register_single_vol, in_axes=axis, out_axes=0)(array)
+    jmap = (
+        jax.pmap
+        if try_in_parallel and len(jax.devices()) > array.shape[axis]
+        else jax.vmap
+    )
+    return jmap(register_single_vol, in_axes=axis, out_axes=0)(array)
