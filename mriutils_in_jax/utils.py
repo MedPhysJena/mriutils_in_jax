@@ -45,3 +45,14 @@ def parse_selection_from_string(sel: str = "") -> tuple[slice, ...]:
         ranges = [int(idx) if idx else None for idx in ranges]
         selection.append(slice(*ranges))
     return tuple(selection)
+def update_axis_after_indexing(ndim: int, target: int, removed: int):
+    if target == removed:
+        raise ValueError("Target axis cannot be the same as the removed axis.")
+
+    # Normalize negative indices
+    target = target % ndim
+    removed = removed % ndim
+
+    if target > removed:
+        return target - 1
+    return target
