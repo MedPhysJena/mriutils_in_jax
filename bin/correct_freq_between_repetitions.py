@@ -144,6 +144,7 @@ def main(
     sel: str = "",
     factor: int = 5,
     check_phase: bool = True,
+    plot_hist:bool = True,
 ):
     nifti_suffix = "".join(moving_phase.suffixes)  # can be .nii or .nii.gz
     if output_basename is None:
@@ -203,6 +204,14 @@ def main(
         mask_fg = magn_downsampled.mean(-1)[..., None] > mask_fg_threshold
     else:
         mask_fg = True
+
+    if plot_hist:
+        plt.hist(magn_downsampled.mean(-1).flatten(), bins=50)
+        if mask_fg_threshold:
+            plt.axvline(mask_fg_threshold, c="k")
+        plt.savefig(
+            output_basename.parent / f"{output_basename.name}-hist.png",
+        )
     phase_offset = jnp.where(mask_fg, jnp.angle(complex_downsampled), 0)
     weights = jnp.where(mask_fg, magn_downsampled, 0)
     plot_comparison(
