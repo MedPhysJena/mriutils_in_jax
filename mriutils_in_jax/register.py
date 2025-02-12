@@ -1,18 +1,23 @@
 import jax
 import jax.numpy as jnp
 import numpy as onp
-from jaxtyping import Array, Float
+from jaxtyping import Array, Complex, Float
 from skimage_in_jax.registration import phase_cross_correlation
+
 from mriutils_in_jax.utils import grid_basis
 
 
 def fourier_shift(
-    array: Float[Array, "..."],
+    array: Float[Array, "..."] | Complex[Array, "..."],
     shift: Float[Array, " ndim"],
     axes: tuple[int, ...] | None = None,
-):
+) -> Float[Array, "..."] | Complex[Array, "..."]:
     array = jnp.asarray(array)
     shift = jnp.asarray(shift)
+    if rfft := not jnp.iscomplexobj(array):
+        fft, ifft = jnp.fft.rfftn, jnp.fft.irfftn
+    else:
+        fft, ifft = jnp.fft.fftn, jnp.fft.ifftn
     if axes is None:
         axes = tuple(range(array.ndim))
     batch_axes = tuple(a for a in range(array.ndim) if a not in axes)
@@ -20,10 +25,10 @@ def fourier_shift(
     shape = tuple(array.shape[a] for a in axes)
 
     # Compute the frequency grid
-    phase_shift = grid_basis(shape, reciprocal=True, rfft=True) @ shift
+    phase_shift = grid_basis(shape, reciprocal=True, rfft=rfft) @ shift
     # Apply Fourier shift theorem
-    return jnp.fft.irfftn(
-        jnp.fft.rfftn(array, axes=axes)
+    return ifft(
+        fft(array, axes=axes)
         * jnp.expand_dims(jnp.exp(-2j * jnp.pi * phase_shift), batch_axes),
         axes=axes,
     )
