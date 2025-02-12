@@ -12,7 +12,7 @@ from yaslp.utils import grid_basis
 
 from mriutils_in_jax.register import register, fourier_shift as fourier_shift_in_jax
 
-PLOT = True
+PLOT = False
 NVOL = 5
 NREP = 4
 NSOS = 2
@@ -140,6 +140,15 @@ def test_data__spatial_echo(data__spatial_echo):
     plt.show()
 
 
+def test_spatial_echo(data__spatial_echo, shifts):
+    """Just a check how the data are generated."""
+    dat = data__spatial_echo
+    shifts_recovered = register(dat.observed, axis=dat.axis)
+    assert jnp.allclose(
+        shifts[:, : dat.orig.ndim] + shifts_recovered, 0, atol=0.1, rtol=0.1
+    )
+
+
 @pytest.fixture(params=[1, 2, 3])
 def data__spatial_echo_coil(shifts, request):
     nd = request.param
@@ -193,6 +202,16 @@ def test_data__spatial_echo_coil(data__spatial_echo_coil):
 
         _show(dat.orig.take(coil_idx, -1), ax_col[-1])
     plt.show()
+
+
+def test_spatial_echo_coil(data__spatial_echo_coil, shifts):
+    """Just a check how the data are generated."""
+    dat = data__spatial_echo_coil
+    observed = (dat.observed**2).sum(dat.reduce_axes) ** 0.5
+    shifts_recovered = register(observed, axis=dat.axis)
+    assert jnp.allclose(
+        shifts[:, : dat.orig.ndim - 1] + shifts_recovered, 0, atol=0.1, rtol=0.1
+    )
 
 
 @pytest.fixture(params=[1, 2, 3])
