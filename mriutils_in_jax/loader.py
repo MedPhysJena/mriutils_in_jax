@@ -11,11 +11,13 @@ from loguru import logger
 from mriutils_in_jax.utils import parse_selection_from_string
 
 
-def braced_glob(pattern: str)->list[Path]:
+def braced_glob(pattern: str, resolve=False)->list[Path]:
 
     filenames = []
     for x in braceexpand(pattern):
         filenames.extend(glob.glob(x))
+    if resolve:
+        filenames = [Path(f).resolve() for f in filenames]
 
     return filenames
 
