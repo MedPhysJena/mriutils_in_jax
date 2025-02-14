@@ -1,13 +1,23 @@
+import glob
 from pathlib import Path
 from typing import Literal
 
 import jax.numpy as jnp
 import nibabel as nib
+from braceexpand import braceexpand
 from jaxtyping import Array, Complex
 from loguru import logger
 
 from mriutils_in_jax.utils import parse_selection_from_string
 
+
+def braced_glob(pattern: str)->list[Path]:
+
+    filenames = []
+    for x in braceexpand(pattern):
+        filenames.extend(glob.glob(x))
+
+    return filenames
 
 class Loaded:
     def __init__(

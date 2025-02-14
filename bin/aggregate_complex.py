@@ -1,15 +1,13 @@
-import glob
 from pathlib import Path
 
 import jax.numpy as jnp
 import nibabel as nib
 import typer
-from braceexpand import braceexpand
 from jaxtyping import Array, Complex
 from loguru import logger
 from tqdm import tqdm
 
-from mriutils_in_jax.loader import Loaded
+from mriutils_in_jax.loader import Loaded, braced_glob
 
 
 def aggregate(filenames_magn, filenames_phase, **kws) -> Complex[Array, "..."]:
@@ -27,12 +25,6 @@ def aggregate(filenames_magn, filenames_phase, **kws) -> Complex[Array, "..."]:
     return agg / n
 
 
-def braced_glob(path):
-    filenames = []
-    for x in braceexpand(path):
-        filenames.extend(glob.glob(x))
-
-    return filenames
 
 
 def main(
