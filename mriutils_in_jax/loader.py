@@ -1,13 +1,23 @@
+import glob
 from pathlib import Path
 from typing import Literal
 
 import jax.numpy as jnp
 import nibabel as nib
+from braceexpand import braceexpand
 from jaxtyping import Array, Complex
 from loguru import logger
 
 from mriutils_in_jax.utils import parse_selection_from_string
 
+
+def braced_glob(pattern: str)->list[Path]:
+
+    filenames = []
+    for x in braceexpand(pattern):
+        filenames.extend(glob.glob(x))
+
+    return filenames
 
 class Loaded:
     def __init__(
@@ -17,7 +27,7 @@ class Loaded:
         axis_echo: int = -1,
         selection: str = "",
         check_phase: bool = True,
-        magn_scale: float | Literal["percentile"] | None = None,
+        magn_scale: float | Literal["percentile"] = 1.0,
     ):
         self.sel = parse_selection_from_string(selection)
         logger.debug("Loading magn from {}", path_magn)
@@ -39,12 +49,10 @@ class Loaded:
             self.scale = jnp.nanpercentile(magn, jnp.array(99))
         elif isinstance(magn_scale, float):
             self.scale = magn_scale
-        elif magn_scale is None:
-            self.scale = 1.0
         else:
             raise ValueError(
                 f"Unexpected value for {magn_scale=}, "
-                "must be a float, 'percentile', or None"
+                "must be a float, 'percentile'"
             )
 
         logger.debug("Scaling the magnitude by {}", self.scale)
