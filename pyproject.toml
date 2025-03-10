@@ -21,7 +21,7 @@ phase_corr = ["jaxopt"]
 gpu = ["jax[cuda]==0.4.35"]
 all = [
   "braceexpand",
-  "jaxopt"
+  "jaxopt",
   "nibabel",
   "pytest",
   "skimage_in_jax @ git+https://github.com/Sibgatulin/skimage_in_jax.git@v0.1.1",
