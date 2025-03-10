@@ -12,9 +12,49 @@ def fourier_shift(
     shift: Float[Array, " ndim"],
     axes: tuple[int, ...] | None = None,
 ) -> Float[Array, "..."] | Complex[Array, "..."]:
+    """
+    Applies a sub-pixel spatial shift to an input array using the Fourier shift theorem.
+
+    This function computes the Fourier transform of the input array, applies a phase
+    shift corresponding to the desired translation along the specified axes, and then
+    computes the inverse Fourier transform to obtain the shifted array. The appropriate
+    FFT routines are chosen based on whether the input array is real-valued or
+    complex-valued.
+
+    Parameters
+    ----------
+    array : A real- or complex-valued input array.
+        The array to be shifted.
+    shift : A 1D array of shift values.
+        Each element corresponds to the desired shift along the respective axis.
+        Its length must equal the number of axes along which the shift is applied.
+        (By default, all axes of the input.)
+    axes : A tuple of integers, optional.
+        The axes along which to apply the shift. If None, the shift is applied to
+        all axes of the array.
+
+    Returns
+    -------
+    shifted : A real- or complex values array
+        The shifted array, having the same shape and data type as the input array.
+
+    Raises
+    ------
+        AssertionError: If the length of the shift array does not match the number
+        of axes specified.
+
+    Notes
+    -----
+    - When the input array is real-valued, the function uses the real FFT
+        (rfftn and irfftn) to optimize performance. For complex arrays, the standard
+        FFT (fftn and ifftn) is used.
+    - The phase shift is computed as:
+            exp(-2πj * (frequency_grid @ shift))
+        and is applied in the Fourier domain.
+    """
     array = jnp.asarray(array)
     shift = jnp.asarray(shift)
-    if rfft := not jnp.iscomplexobj(array):
+    if use_rfft := not jnp.iscomplexobj(array):
         fft, ifft = jnp.fft.rfftn, jnp.fft.irfftn
     else:
         fft, ifft = jnp.fft.fftn, jnp.fft.ifftn
@@ -25,7 +65,7 @@ def fourier_shift(
     shape = tuple(array.shape[a] for a in axes)
 
     # Compute the frequency grid
-    phase_shift = grid_basis(shape, reciprocal=True, rfft=rfft) @ shift
+    phase_shift = grid_basis(shape, reciprocal=True, rfft=use_rfft) @ shift
     # Apply Fourier shift theorem
     return ifft(
         fft(array, axes=axes)
