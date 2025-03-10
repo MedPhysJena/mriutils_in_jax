@@ -1,8 +1,11 @@
+import tempfile
 from dataclasses import dataclass
 
 import jax
+import jax.random as jr
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
+import nibabel as nib
 import numpy as onp
 import pytest
 from jaxtyping import Array, Float
@@ -10,7 +13,11 @@ from scipy.ndimage import fourier_shift
 from yaslp.phantom import shepp_logan
 from yaslp.utils import grid_basis
 
-from mriutils_in_jax.register import register, fourier_shift as fourier_shift_in_jax
+from mriutils_in_jax.register import (
+    register_complex_data,
+    identify_necessary_shifts,
+    fourier_shift as fourier_shift_in_jax,
+)
 
 PLOT = False
 NVOL = 5
@@ -47,6 +54,7 @@ def test_phantom(nd):
     phantom = gen_phantom(nd)
     assert phantom.ndim == nd
     _show(phantom)
+    plt.title("Phantom")
     plt.show()
 
 
@@ -99,6 +107,30 @@ class DataDef:
     reduce_axes: tuple[int, ...]
 
 
+@pytest.fixture(params=["jax", "numpy", "arrayproxy"])
+def cast_to(request):
+    """Generate a callback that will cast the test data to either of the types."""
+    if request.param == "arrayproxy":
+
+        def cb(observed):
+            with tempfile.NamedTemporaryFile(suffix=".nii", delete=False) as tmp:
+                filename = tmp.name
+            nib.nifti1.Nifti1Image(observed, onp.eye(4)).to_filename(filename)
+            img = nib.nifti1.load(filename)
+            return img.dataobj
+    elif request.param == "numpy":
+
+        def cb(observed):
+            return onp.array(observed)
+    elif request.param == "jax":
+
+        def cb(observed):
+            return jnp.array(observed)
+    else:
+        raise ValueError(f"Unexpected {request.param=}")
+    return cb
+
+
 @pytest.fixture(
     params=[
         (1, 0),
@@ -130,20 +162,23 @@ def data__spatial_echo(shifts, request):
     )
 
 
-def test_data__spatial_echo(data__spatial_echo):
+def test_data__spatial_echo_only(data__spatial_echo):
     """Just a check how the data are generated."""
     dat = data__spatial_echo
     _, axes = plt.subplots(nrows=NVOL + 1, sharex=True)
     _show(dat.orig, axes[-1])
+    axes[-1].set_ylabel("Orig")
     for idx, ax in enumerate(axes[:-1]):
         _show(dat.observed.take(idx, dat.axis), ax)
+        ax.set_ylabel(f"Shifted echo = {idx}")
+    axes[-1].set_xlabel("x")
     plt.show()
 
 
-def test_spatial_echo(data__spatial_echo, shifts):
+def test_registration__spatial_echo_only(data__spatial_echo, shifts, cast_to):
     """Just a check how the data are generated."""
     dat = data__spatial_echo
-    shifts_recovered = register(dat.observed, axis=dat.axis)
+    shifts_recovered = identify_necessary_shifts(cast_to(dat.observed), axis=dat.axis)
     assert jnp.allclose(
         shifts[:, : dat.orig.ndim] + shifts_recovered, 0, atol=0.1, rtol=0.1
     )
@@ -152,8 +187,8 @@ def test_spatial_echo(data__spatial_echo, shifts):
 @pytest.fixture(params=[1, 2, 3])
 def data__spatial_echo_coil(shifts, request):
     nd = request.param
-    axis = 0
     coil_axis = -1
+    axis = -2
 
     data = gen_phantom(nd)
     basis = grid_basis(data.shape)
@@ -181,7 +216,9 @@ def data__spatial_echo_coil(shifts, request):
         ],
         axis=axis,
     )
-    spatial_axes = tuple(a for a in range(nd) if a != axis)
+    # HACK: implies that coil and echo are the last
+    # FIX: just skip it, current implementation does not need it
+    spatial_axes = tuple(a for a in range(shifted.ndim - 2))
     return DataDef(
         orig=data,
         observed=shifted,
@@ -196,19 +233,34 @@ def test_data__spatial_echo_coil(data__spatial_echo_coil):
     """Just a check how the data are generated."""
     dat = data__spatial_echo_coil
     _, axes = plt.subplots(nrows=NVOL + 1, ncols=NSOS, sharex=True, sharey=True)
+
     for coil_idx, ax_col in enumerate(axes.T):
         for echo_idx, ax in enumerate(ax_col[:-1]):
             _show(dat.observed.take(echo_idx, dat.axis).take(coil_idx, -1), ax)
 
         _show(dat.orig.take(coil_idx, -1), ax_col[-1])
+
+    for idx, ax in enumerate(axes[0]):
+        ax.set_title(f"Coil = {idx}")
+    for idx, ax in enumerate(axes[:-1, 0]):
+        ax.set_ylabel(f"Echo = {idx}")
+    axes[-1, 0].set_ylabel("Orig")
+
     plt.show()
 
 
-def test_spatial_echo_coil(data__spatial_echo_coil, shifts):
-    """Just a check how the data are generated."""
+def test_registration__spatial_echo_coil(data__spatial_echo_coil, shifts, cast_to):
     dat = data__spatial_echo_coil
-    observed = (dat.observed**2).sum(dat.reduce_axes) ** 0.5
-    shifts_recovered = register(observed, axis=dat.axis)
+    phase = jr.uniform(
+        jr.PRNGKey(0), shape=dat.observed.shape, minval=-jnp.pi, maxval=jnp.pi
+    )
+    shifted_complex, shifts_recovered = register_complex_data(
+        magn=cast_to(dat.observed),
+        phase=cast_to(phase),
+        axis_echo=dat.axis,
+        axis_coil=dat.reduce_axes[0],
+    )
+
     assert jnp.allclose(
         shifts[:, : dat.orig.ndim - 1] + shifts_recovered, 0, atol=0.1, rtol=0.1
     )
@@ -253,6 +305,13 @@ def test_data__spatial_echo_batch(data__spatial_echo_batch):
         _show(dat.orig[rep_idx], ax_col[-1])
         for idx, ax in enumerate(ax_col[:-1]):
             _show(dat.observed[idx, rep_idx], ax)
+
+    for idx, ax in enumerate(axes[0]):
+        ax.set_title(f"Batch = {idx}")
+    for idx, ax in enumerate(axes[:-1, 0]):
+        ax.set_ylabel(f"Echo = {idx}")
+    axes[-1, 0].set_ylabel("Orig")
+
     plt.show()
 
 
@@ -313,4 +372,11 @@ def test_data__spatial_echo_coil_batch(data__spatial_echo_coil_batch):
             _show(dat.observed[echo_idx, 1, ..., coil_idx], ax)
 
         _show(dat.orig[1, ..., coil_idx], ax_col[-1])
+
+    for idx, ax in enumerate(axes[0]):
+        ax.set_title(f"Coil = {idx}")
+    for idx, ax in enumerate(axes[:-1, 0]):
+        ax.set_ylabel(f"Echo = {idx}")
+    axes[-1, 0].set_ylabel("Orig")
+
     plt.show()
