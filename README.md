@@ -27,3 +27,8 @@ pip install -e "mriutils_in_jax[registration]"
 ```
 
 You can list multiple extras as a comma-separated list in the brackets.
+
+### GPU support
+
+It is fully outsourced to jax. By default the dependencies mention the CPU only version of jax. 
+You can simply specify `gpu` extra when installing this package, or learn more about jax installation [here](https://docs.jax.dev/en/latest/installation.html#installation).
