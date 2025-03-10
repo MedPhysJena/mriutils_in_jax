@@ -13,9 +13,10 @@ dependencies = [
   "tqdm>=4.67.1",
 ]
 [project.optional-dependencies]
+dev = ["pytest", "yaslp @ git+https://github.com/medphysjena/yaslp.git@v0.2.0"]
 cli = ["click", "typer", "braceexpand", "nibabel"]
 io = ["nibabel"]
-registration = ["skimage_in_jax @ git+https://github.com/Sibgatulin/skimage_in_jax.git"]
+registration = ["skimage_in_jax @ git+https://github.com/Sibgatulin/skimage_in_jax.git@v0.1.1"]
 phase_corr = ["jaxopt"]
 
 [tool.ruff.lint]
