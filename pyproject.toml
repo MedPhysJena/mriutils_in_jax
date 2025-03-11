@@ -3,18 +3,34 @@ name = "mriutils-in-jax"
 version = "0.2.4"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10" # because of jax version
 dependencies = [
   "cycler>=0.12.1",
-  "jax>=0.4.35",
-  "jaxopt>=0.8.3",
+  "jax==0.4.35",
   "jaxtyping>=0.2.36",
   "loguru>=0.7.3",
   "matplotlib>=3.9",
-  "nibabel>=5.3.2",
   "tqdm>=4.67.1",
 ]
 [project.optional-dependencies]
-cli = ["click", "typer", "braceexpand"]
+dev = ["pytest", "yaslp @ git+https://github.com/medphysjena/yaslp.git@v0.2.0"]
+cli = ["braceexpand", "nibabel", "typer"]
+io = ["nibabel"]
+registration = ["skimage_in_jax @ git+https://github.com/Sibgatulin/skimage_in_jax.git@v0.1.1"]
+phase_corr = ["jaxopt"]
+gpu = ["jax[cuda]==0.4.35"]
+all = [
+  "braceexpand",
+  "jaxopt",
+  "nibabel",
+  "pytest",
+  "skimage_in_jax @ git+https://github.com/Sibgatulin/skimage_in_jax.git@v0.1.1",
+  "typer",
+  "yaslp @ git+https://github.com/medphysjena/yaslp.git@v0.2.0",
+]
+
+[project.scripts]
+register-echoes-to-last = "mriutils_in_jax.register_cli:app"
+
 [tool.ruff.lint]
 ignore = ["F722"]
