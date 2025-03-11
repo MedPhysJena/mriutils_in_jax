@@ -7,7 +7,7 @@ from jaxtyping import Array, Complex, Float
 from skimage_in_jax.registration import phase_cross_correlation
 from tqdm import trange
 
-from mriutils_in_jax.utils import grid_basis, update_axis_after_indexing, take
+from mriutils_in_jax.utils import grid_basis, take, update_axis_after_indexing
 
 ExecutionMode = Literal["vectorized", "threaded", "low_memory"]
 MODES = list(get_args(ExecutionMode))
@@ -143,14 +143,15 @@ def identify_necessary_shifts(
     - If installed with a GPU support, jax will try to use GPUs if available.
       If no GPU is found, it will default to use the CPU. (This can also be controlled
       by setting `JAX_PLATFORM_NAME` environment variable to `gpu` or `cpu`.)
-    - By default, a CPU, however many threads there is, is seen as a single device.
-      In this case "vectorized" will attempt to use the multiple threads at times, e.g.
-      due to the underlying vectorised FFT implementation.
+    - By default, JAX sees a CPU, however many threads there is, as a single device.
+      In this case execution_mode="vectorized" will attempt to use all available threads
+      _when possible_, e.g. when performing FFT due to its underlying vectorisation.
     - If you have sufficient number of threads, you may want to force jax to treat each
       threat as a separate device and `pmap` over them (running the entire subvolume
-      processing on a single thread). For this export the following environment variable
-      `XLA_FLAGS="--xla_force_host_platform_device_count=16"` (or whatever number of
-      threads. You can use `os.environ` but it must be done before jax is imported)
+      processing on a single thread). To do this simply set execution_mode="threaded"
+      and the code will set the number of devices to the number of threads automatically.
+      In my limited testing, I observed that forcing the device count to the max number
+      proves marginally more beneficial than setting it to the exact number of echoes.
     """
     if execution_mode not in MODES:
         raise ValueError(
