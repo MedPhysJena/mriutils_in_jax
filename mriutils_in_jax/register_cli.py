@@ -1,3 +1,4 @@
+from enum import Enum
 from pathlib import Path
 
 import numpy as onp
@@ -9,8 +10,13 @@ from jaxtyping import Array, Float
 from mriutils_in_jax.loader import Loaded
 from mriutils_in_jax.register import ExecutionMode, register_complex_data
 
-app = typer.Typer()
+# don't show local variables as those contain large arrays
+app = typer.Typer(pretty_exceptions_show_locals=False)
 
+class ExecutionMode(str, Enum):
+    low_memory = "low_memory"
+    vectorized = "vectorized"
+    threaded = "threaded"
 
 def plot(shifts: Float[Array, "necho ndim"]):
     """Convenience function to plot the identified shifts."""
@@ -29,24 +35,17 @@ def register_echos_cli(
     output_base: Path,
     axis: int = -1,
     coil_axis: int | None = None,
-    phase_lim_check: bool = True,
     mode: ExecutionMode = "low_memory",
     compress: bool = False,
     plot_shifts: bool = True,
 ):
     output_base.parent.mkdir(exist_ok=True, parents=True)
 
-    data = Loaded(
-        magn,
-        phase,
-        axis_echo=axis,
-        magn_scale="percentile",
-        check_phase=phase_lim_check,
-    )
-    data.mask_infinite_inplace()
+    magn_ = img.dataobj
+    phase_ = nib.nifti1.load(phase).dataobj
 
     registered_complex, shifts = register_complex_data(
-        data.magn, data.phase, axis_coil=coil_axis, axis_echo=axis, execution_mode=mode
+        magn_, phase_, axis_coil=coil_axis, axis_echo=axis, execution_mode=mode
     )
 
     if plot_shifts:
@@ -57,7 +56,5 @@ def register_echos_cli(
     suffix = "nii.gz" if compress else "nii"
     for name, fn in zip(["phase", "magn"], [onp.angle, abs]):
         nib.nifti1.Nifti1Image(
-            onp.where(data.mask_finite, fn(registered_complex), onp.nan),
-            data.img.affine,
-            data.img.header,
+            fn(registered_complex), img.affine, img.header
         ).to_filename(output_base.parent / (output_base.name + f"-{name}.{suffix}"))
