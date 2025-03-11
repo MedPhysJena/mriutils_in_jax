@@ -11,13 +11,13 @@ from loguru import logger
 from mriutils_in_jax.utils import parse_selection_from_string
 
 
-def braced_glob(pattern: str)->list[Path]:
-
+def braced_glob(pattern: str) -> list[Path]:
     filenames = []
     for x in braceexpand(pattern):
         filenames.extend(glob.glob(x))
 
     return filenames
+
 
 class Loaded:
     def __init__(
@@ -51,8 +51,7 @@ class Loaded:
             self.scale = magn_scale
         else:
             raise ValueError(
-                f"Unexpected value for {magn_scale=}, "
-                "must be a float, 'percentile'"
+                f"Unexpected value for {magn_scale=}, must be a float, 'percentile'"
             )
 
         logger.debug("Scaling the magnitude by {}", self.scale)
