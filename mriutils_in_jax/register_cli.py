@@ -88,6 +88,7 @@ def register_echos_cli(
         plot(shifts)
         plt.savefig(output_base.with_suffix(".png"))
         plt.close()
+    onp.savetxt(output_base.with_suffix(".shifts"), onp.array(shifts))
 
     suffix = "nii.gz" if compress else "nii"
     for name, fn in zip(["phase", "magn"], [onp.angle, abs]):
