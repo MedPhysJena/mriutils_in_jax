@@ -162,7 +162,9 @@ def data__spatial_echo(shifts, request):
     # )
     # just like to feel clever ;P
 
-    spatial_axes = tuple(a for a in range(nd) if a != axis)
+    # everything that is not the shift/echo dim is the spatial
+    nonneg_echo_axis = echo_axis % nd
+    spatial_axes = tuple(a for a in range(nd) if a != nonneg_echo_axis)
     return DataDef(
         orig=data,
         observed=shifted,
@@ -238,9 +240,13 @@ def data__spatial_echo_coil(shifts, request):
         ],
         axis=echo_axis,
     )
-    # HACK: implies that coil and echo are the last
-    # FIX: just skip it, current implementation does not need it
-    spatial_axes = tuple(a for a in range(shifted.ndim - 2))
+    nonneg_echo_axis = echo_axis % multi_echo_data.ndim
+    nonneg_coil_axis = coil_axis % multi_echo_data.ndim
+    spatial_axes = tuple(
+        a
+        for a in range(multi_echo_data.ndim)
+        if a not in [nonneg_coil_axis, nonneg_echo_axis]
+    )
     return DataDef(
         orig=single_echo_data,
         observed=multi_echo_data,
