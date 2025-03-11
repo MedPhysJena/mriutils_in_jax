@@ -195,8 +195,8 @@ def identify_necessary_shifts(
 def register_complex_data(
     magn,
     phase,
-    axis_coil: int | None = -1,
     axis_echo: int = -2,
+    axis_coil: int | None = -1,
     execution_mode: ExecutionMode = "low_memory",
 ) -> tuple[Complex[Array, "..."], Float[Array, "necho ndim"]]:
     """Register (and shift) subvolumes along specified axis.
@@ -214,15 +214,15 @@ def register_complex_data(
     ----------
     magn, phase : np.ndarray, jnp.ndarray, or nib.arrayproxy.ArrayProxy
         Pair of input arrays
+    axis_echo: int, default = -2
+        Axis which will be subdivided and each subvolume along this axis
+        will be registered against array.take(ref, axis).
+        In this project, second from the right.
     axis_coil : int, default = -1
         In general, when set to None, the data assumed to not include multiple channels.
         Otherwise, this axis will be reduced using sum-of-squares before identifying
         the shifts, and then each channel will be shifted by the same amount.
         In this project, the channels are assumed to be stacked along the rightmost dim.
-    axis_echo: int, default = -2
-        Axis which will be subdivided and each subvolume along this axis
-        will be registered against array.take(ref, axis).
-        In this project, second from the right.
     execution_mode : str, default = "vectorized"
         Execution mode: one of "low_memory", "vectorized", or "threaded".
 
