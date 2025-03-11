@@ -157,6 +157,12 @@ def identify_necessary_shifts(
         raise ValueError(
             f"Invalid execution_mode {execution_mode!r}. Choose one of {MODES}."
         )
+    if execution_mode =="threaded":
+        import multiprocessing
+        import os
+
+        os.environ["XLA_FLAGS"]=f"--xla_force_host_platform_device_count={multiprocessing.cpu_count()}"
+
     # [ref] here and [idx] below (as opposed to ref and idx) preserve the singleton
     # axis dimension, allowing combine_fn to remain correct
     reference = combine_fn(take(array, indices=[ref], axis=axis)).squeeze()
