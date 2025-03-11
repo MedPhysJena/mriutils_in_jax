@@ -64,6 +64,7 @@ def test_phantom(nd):
 
 
 def fourier_shift_in_scipy(array, shift, axes: tuple[int, ...] | None = None):
+    """Reference implementation of fourier_shift as used in skimage."""
     if axes is None:
         axes = tuple(range(min(array.ndim, 3)))
     input_ = onp.fft.rfftn(array, axes=axes)
@@ -95,6 +96,7 @@ def test_fourier_shift_in_jax(nd, shift):
 
 @pytest.fixture
 def shifts():
+    """Shifts used to generate synthetic data."""
     shift = onp.linspace(SHIFT_MAX, 0, NVOL)
     _scaling_factor = onp.array([6, -3, 1])
     return shift[:, None] / _scaling_factor
@@ -102,9 +104,11 @@ def shifts():
 
 @dataclass
 class DataDef:
-    orig: Float[Array, "..."]
-    observed: Float[Array, "..."]
-    axis: int
+    """Structure to capture synthetic test data."""
+
+    orig: Float[Array, "..."]  # single echo (maybe multi-channel)
+    observed: Float[Array, "..."]  # shifted multi-echo (maybe multi-channel)
+    echo_axis: int
     spatial_axes: tuple[int, ...]
     batch_axes: tuple[int, ...]
     reduce_axes: tuple[int, ...]
@@ -145,20 +149,24 @@ def cast_to(request):
     ]
 )
 def data__spatial_echo(shifts, request):
-    nd, axis = request.param
+    """Simplest test data: only spatial and echo dims."""
+    nd, echo_axis = request.param
     data = gen_phantom(nd)
-    shifted = jax.vmap(fourier_shift_in_jax, in_axes=(None, 0), out_axes=axis)(
+    shifted = jax.vmap(fourier_shift_in_jax, in_axes=(None, 0), out_axes=echo_axis)(
         data, shifts[:, :nd]
     )
-    # same as this:
+
+    # vmap above is the same as this:
     # shifted = jnp.stack(
-    #     [fourier_shift_in_jax(data, shift) for shift in shifts[:, :nd]], axis=axis
+    #   [fourier_shift_in_jax(data, shift) for shift in shifts[:, :nd]], axis=echo_axis
     # )
+    # just like to feel clever ;P
+
     spatial_axes = tuple(a for a in range(nd) if a != axis)
     return DataDef(
         orig=data,
         observed=shifted,
-        axis=axis,
+        echo_axis=echo_axis,
         spatial_axes=spatial_axes,
         batch_axes=(),
         reduce_axes=(),
@@ -173,7 +181,7 @@ def test_data__spatial_echo_only(data__spatial_echo):
     _show(dat.orig, axes[-1])
     axes[-1].set_ylabel("Orig")
     for idx, ax in enumerate(axes[:-1]):
-        _show(dat.observed.take(idx, dat.axis), ax)
+        _show(dat.observed.take(idx, dat.echo_axis), ax)
         ax.set_ylabel(f"Shifted echo = {idx}")
     axes[-1].set_xlabel("x")
     plt.show()
@@ -182,7 +190,9 @@ def test_data__spatial_echo_only(data__spatial_echo):
 def test_registration__spatial_echo_only(data__spatial_echo, shifts, cast_to):
     """Just a check how the data are generated."""
     dat = data__spatial_echo
-    shifts_recovered = identify_necessary_shifts(cast_to(dat.observed), axis=dat.axis)
+    shifts_recovered = identify_necessary_shifts(
+        cast_to(dat.observed), axis=dat.echo_axis
+    )
     assert jnp.allclose(
         shifts[:, : dat.orig.ndim] + shifts_recovered, 0, atol=0.1, rtol=0.1
     )
@@ -190,43 +200,51 @@ def test_registration__spatial_echo_only(data__spatial_echo, shifts, cast_to):
 
 @pytest.fixture(params=[1, 2, 3])
 def data__spatial_echo_coil(shifts, request):
+    """Generate data with spatial, echo, and coil dims."""
     nd = request.param
     coil_axis = -1
-    axis = -2
+    echo_axis = -2
 
-    data = gen_phantom(nd)
-    basis = grid_basis(data.shape)
+    spatial_data = gen_phantom(nd)
+    basis = grid_basis(spatial_data.shape)
     centre_ = jnp.array([0.5] * nd)
     centres = centre_[:, None] * jnp.array([-1, 1])
     assert centres.shape[-1] == NSOS
     coil_profile = jnp.linalg.norm(basis[..., None] - centres, axis=-2)
     coil_profile = (coil_profile.max() - coil_profile) / coil_profile.max()
-    assert coil_profile.shape == data.shape + (NSOS,)
+    assert coil_profile.shape == spatial_data.shape + (NSOS,)
 
-    data = jnp.expand_dims(data, coil_axis) * coil_profile
-    # same as data[..., None] * coil_profile
+    single_echo_data = jnp.expand_dims(spatial_data, coil_axis) * coil_profile
+    # more general version of `spatial_data[..., None] * coil_profile`
     if INTERACTIVE:
         _, axes = plt.subplots(nrows=2, ncols=2, sharey=True, sharex=True)
-        for ax_row, arr in zip(axes, [coil_profile, data]):
+        for ax_row, arr in zip(axes, [coil_profile, single_echo_data]):
             for coil_idx, ax in enumerate(ax_row):
                 _show(arr.take(coil_idx, coil_axis), ax)
         plt.show()
 
-    shifted = jnp.stack(
+    multi_echo_data = jnp.stack(
         [
-            # excluding coil_axis = -1
-            fourier_shift_in_jax(data, shift, axes=tuple(range(nd)))
+            fourier_shift_in_jax(
+                single_echo_data,
+                shift,
+                axes=tuple(
+                    a
+                    for a in range(single_echo_data.ndim)
+                    if a != (coil_axis % single_echo_data.ndim)
+                ),
+            )
             for shift in shifts[:, :nd]
         ],
-        axis=axis,
+        axis=echo_axis,
     )
     # HACK: implies that coil and echo are the last
     # FIX: just skip it, current implementation does not need it
     spatial_axes = tuple(a for a in range(shifted.ndim - 2))
     return DataDef(
-        orig=data,
-        observed=shifted,
-        axis=axis,
+        orig=single_echo_data,
+        observed=multi_echo_data,
+        echo_axis=echo_axis,
         spatial_axes=spatial_axes,
         batch_axes=(),
         reduce_axes=(coil_axis,),
@@ -241,7 +259,7 @@ def test_data__spatial_echo_coil(data__spatial_echo_coil):
 
     for coil_idx, ax_col in enumerate(axes.T):
         for echo_idx, ax in enumerate(ax_col[:-1]):
-            _show(dat.observed.take(echo_idx, dat.axis).take(coil_idx, -1), ax)
+            _show(dat.observed.take(echo_idx, dat.echo_axis).take(coil_idx, -1), ax)
 
         _show(dat.orig.take(coil_idx, -1), ax_col[-1])
 
@@ -255,6 +273,7 @@ def test_data__spatial_echo_coil(data__spatial_echo_coil):
 
 
 def test_registration__spatial_echo_coil(data__spatial_echo_coil, shifts, cast_to):
+    """Test registration in the presence of multiple channels."""
     dat = data__spatial_echo_coil
     phase = jr.uniform(
         jr.PRNGKey(0), shape=dat.observed.shape, minval=-jnp.pi, maxval=jnp.pi
@@ -262,7 +281,7 @@ def test_registration__spatial_echo_coil(data__spatial_echo_coil, shifts, cast_t
     shifted_complex, shifts_recovered = register_complex_data(
         magn=cast_to(dat.observed),
         phase=cast_to(phase),
-        axis_echo=dat.axis,
+        axis_echo=dat.echo_axis,
         axis_coil=dat.reduce_axes[0],
     )
 
@@ -273,8 +292,13 @@ def test_registration__spatial_echo_coil(data__spatial_echo_coil, shifts, cast_t
 
 @pytest.fixture(params=[1, 2, 3])
 def data__spatial_echo_batch(shifts, request):
+    """Generate data with a batch axis.
+
+    Over this axis the registration must be looped but the data must not be not shifted.
+    """
     nd = request.param
-    axis = 0
+
+    echo_axis = 0
     batch_axis = 1
     batch_size = 3
     batch_factor = 0.8 + 0.2 * jnp.arange(batch_size)
@@ -283,17 +307,17 @@ def data__spatial_echo_batch(shifts, request):
     shifts = jnp.expand_dims(batch_factor, (1, 2)) * shifts
 
     shifted = jax.vmap(
-        jax.vmap(fourier_shift_in_jax, in_axes=(None, axis), out_axes=axis),
+        jax.vmap(fourier_shift_in_jax, in_axes=(None, echo_axis), out_axes=echo_axis),
         in_axes=(0, 0),  # batch_axis - 1
         out_axes=batch_axis,  # batch AFTER axis = 0
     )(data, shifts[..., :nd])
     assert shifted.shape == ((shifts.shape[1],) + data.shape)
 
-    spatial_axes = tuple(a for a in range(nd) if a != axis)
+    spatial_axes = tuple(a for a in range(nd) if a != echo_axis)
     return DataDef(
         orig=data,
         observed=shifted,
-        axis=axis,
+        echo_axis=echo_axis,
         spatial_axes=spatial_axes,
         batch_axes=(batch_axis,),
         reduce_axes=(),
@@ -323,8 +347,9 @@ def test_data__spatial_echo_batch(data__spatial_echo_batch):
 
 @pytest.fixture(params=[1, 2, 3])
 def data__spatial_echo_coil_batch(shifts, request):
+    """Generate data with a batch and coil dims."""
     nd = request.param
-    axis = 0
+    echo_axis = 0
     coil_axis = -1
     batch_axis = 1
     batch_size = 3
@@ -352,17 +377,19 @@ def data__spatial_echo_coil_batch(shifts, request):
         plt.show()
 
     shifted = jax.vmap(
-        jax.vmap(fourier_shift_in_jax, in_axes=(None, axis, None), out_axes=axis),
+        jax.vmap(
+            fourier_shift_in_jax, in_axes=(None, echo_axis, None), out_axes=echo_axis
+        ),
         in_axes=(0, 0, None),  # batch_axis - 1
         out_axes=batch_axis,  # batch AFTER axis = 0
     )(data, shifts[..., :nd], tuple(range(nd)))
     assert shifted.shape == ((shifts.shape[1],) + data.shape)
 
-    spatial_axes = tuple(a for a in range(nd) if a != axis)
+    spatial_axes = tuple(a for a in range(nd) if a != echo_axis)
     return DataDef(
         orig=data,
         observed=shifted,
-        axis=axis,
+        echo_axis=echo_axis,
         spatial_axes=spatial_axes,
         batch_axes=(batch_axis,),
         reduce_axes=(coil_axis,),
