@@ -254,14 +254,6 @@ def register_complex_data(
             f"Invalid execution_mode {execution_mode!r}. Choose one of {MODES}."
         )
 
-    # The following assertion is temporary
-    if axis_coil is not None and (
-        axis_coil not in [-1, -2, 3, 4] or axis_echo not in [-1, -2, 3, 4]
-    ):
-        raise NotImplementedError(
-            f"Currently {axis_coil=} and {axis_echo=} must be the two trailing axes"
-        )
-
     if magn.shape != phase.shape:
         raise ValueError(
             "Specified niftis have incompatible shapes: "
@@ -322,11 +314,8 @@ def register_complex_data(
         # nesting pmap may be ill-advised. Plus N_channel < N_echo most of the time,
         # so I chose to use vmap here
         shift = jax.vmap(
-            # the following axes=... can be made more general
-            # especially if I expand the functionality of update_axis_after_indexing
-            # FIX: these axes are not consistent with all possible axes_{echo,coil}
-            # combinations, right? This dictates the NotImplementedError above
-            # TODO: add a test
+            # the following axes=... are trivial as both of the other two dims are
+            # squeezed out, thus the remaining axes are ordered
             lambda x, s: fourier_shift(x, s, axes=tuple(range(magn.ndim - 2))),
             # in_axes capture one axis per input: axis_coil... for the array
             # and None for the shift (as shifts are not repeated for each coil,

@@ -63,6 +63,7 @@ def take(array, indices: ArrayLike, axis: int | None = None, *args, **kwargs) ->
         else:
             raise
 
+
 def update_axis_after_indexing(ndim: int, target: int, removed: int):
     if target == removed:
         raise ValueError("Target axis cannot be the same as the removed axis.")
