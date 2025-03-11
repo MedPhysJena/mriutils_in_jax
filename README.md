@@ -4,13 +4,15 @@ Meant for some helpful utils and functions
 
 ## Installation
 
-To install the module directly from git run
+To install a specific tag / release directly from git:
 
 ```sh
-pip install git+https://github.com/MedPhysJena/mriutils_in_jax.git
+pip install git+https://github.com/MedPhysJena/mriutils_in_jax.git@v0.2.5
 ```
 
-You can also checkout the repository manually and install it in the developmental mode ("editable installation"):
+You can omit the tag at the end (i.e. drop `@v0.2.5`) to checkout and install the current commit.
+
+You can also checkout the repository locally and install it in the developmental mode ("editable installation"):
 
 ```sh
 git clone https://github.com/MedPhysJena/mriutils_in_jax.git
