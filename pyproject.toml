@@ -29,5 +29,8 @@ all = [
   "yaslp @ git+https://github.com/medphysjena/yaslp.git@v0.2.0",
 ]
 
+[project.scripts]
+register-echoes-to-last = "mriutils_in_jax.register_cli:app"
+
 [tool.ruff.lint]
 ignore = ["F722"]

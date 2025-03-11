@@ -74,6 +74,15 @@ class Loaded:
             self.phase = jnp.swapaxes(self.phase, axis_echo, -1)
         self.shape = magn.shape
 
+        # The following is a type-consistent placeholder.
+        # Scalar True is automatically broadcast to array shape when needed
+        self.mask_finite = True
+
     @property
     def complex(self) -> Complex[Array, "*spatial echo"]:
         return self.magn * jnp.exp(1j * self.phase)
+
+    def mask_infinite_inplace(self, masking_value=0) -> None:
+        self.mask_finite = jnp.isfinite(self.magn) & jnp.isfinite(self.phase)
+        self.magn = jnp.where(self.mask_finite, self.magn, masking_value)
+        self.phase = jnp.where(self.mask_finite, self.phase, masking_value)
