@@ -246,7 +246,7 @@ def register_complex_data(
         )
 
     # The following assertion is temporary
-    if axis_coil not in [-1, -2, 3, 4] or axis_echo not in [-1, -2, 3, 4]:
+    if axis_coil is not None and (axis_coil not in [-1, -2, 3, 4] or axis_echo not in [-1, -2, 3, 4]):
         raise NotImplementedError(
             f"Currently {axis_coil=} and {axis_echo=} must be the two trailing axes"
         )
@@ -340,7 +340,7 @@ def register_complex_data(
             axis=axis_echo,
         )
     else:
-        if execution_mode == "threaded" and len(jax.devices()) > shifts.shape[0]:
+        if execution_mode == "threaded" and len(jax.devices()) >= shifts.shape[0]:
             jmap = jax.pmap
         else:
             jmap = jax.vmap
