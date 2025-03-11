@@ -32,3 +32,15 @@ You can list multiple extras as a comma-separated list in the brackets.
 
 It is fully outsourced to jax. By default the dependencies mention the CPU only version of jax. 
 You can simply specify `gpu` extra when installing this package, or learn more about jax installation [here](https://docs.jax.dev/en/latest/installation.html#installation).
+
+In certain scenarios, one may encounter data that is too large for a single available GPU.
+In this case, consider setting `JAX_PLATFORM_NAME=cpu` environment variable to force jax to
+perform analysis on the CPU (and thus use RAM, which is often more permissive than that of a GPU)
+
+## Usage
+
+### Registration
+
+Installing this package will make `register-echoes-to-last` command available within the python environment.
+Consider running `register-echoes-to-last --help`. Additionally, the bulk of the functionality can be
+used from within python using `mriutils_in_jax.register.register_complex_data`. Please, check its help.
