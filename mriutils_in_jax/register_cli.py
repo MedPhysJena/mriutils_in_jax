@@ -12,10 +12,12 @@ from mriutils_in_jax.register import register_complex_data
 # don't show local variables as those contain large arrays
 app = typer.Typer(pretty_exceptions_show_locals=False)
 
+
 class ExecutionMode(str, Enum):
     low_memory = "low_memory"
     vectorized = "vectorized"
     threaded = "threaded"
+
 
 def plot(shifts: Float[Array, "necho ndim"]):
     """Convenience function to plot the identified shifts."""
@@ -40,10 +42,10 @@ def register_echos_cli(
 ):
     """Register subvolumes in MAGN and PHASE along an axis using the Fourier shift theorem.
 
-    Shifted images will be written under OUTPUT_BASE-{magn,phase}.nii[.gz] 
+    Shifted images will be written under OUTPUT_BASE-{magn,phase}.nii[.gz]
     (if --compress is passed).
 
-    The values of the shifts and their plot (unless --no-plot-shifts is specified) 
+    The values of the shifts and their plot (unless --no-plot-shifts is specified)
     will also be saved as OUTPUT_BASE.{png,txt}.
 
     If the data contains multiple channels, specify the dimension using --coil-axis
@@ -63,12 +65,12 @@ def register_echos_cli(
       If no GPU is found, it will default to use the CPU. (This can also be controlled
       by setting `JAX_PLATFORM_NAME` environment variable to `gpu` or `cpu`.)
     - By default, JAX sees a CPU, however many threads there is, as a single device.
-      In this case --mode "vectorized" will attempt to use all available threads 
+      In this case --mode "vectorized" will attempt to use all available threads
       _when possible_, e.g. when performing FFT due to its underlying vectorisation.
     - If you have sufficient number of threads, you may want to force jax to treat each
       threat as a separate device and `pmap` over them (running the entire subvolume
       processing on a single thread). To do this simply pass --mode "threaded" and the
-      code will set the number of devices to the number of threads automatically. 
+      code will set the number of devices to the number of threads automatically.
       In my limited testing, I observed that forcing the device count to the max number
       proves marginally more beneficial than setting it to the exact number of echoes.
     """
