@@ -19,13 +19,17 @@ from mriutils_in_jax.register import (
     fourier_shift as fourier_shift_in_jax,
 )
 
-PLOT = False
+INTERACTIVE = False
 NVOL = 5
 NREP = 4
 NSOS = 2
 NSPAT_MAX = 3
 SHIFT_MAX = 6
 SPAT_SHAPE = (10, 20, 30)
+
+interactive = pytest.mark.skipif(
+    not INTERACTIVE, reason="interactive plotting switched off"
+)
 
 
 def gen_phantom(nd):
@@ -48,6 +52,7 @@ def _show(arr, ax=None):
     return ax
 
 
+@interactive
 @pytest.mark.parametrize("nd", [1, 2, 3])
 def test_phantom(nd):
     """Quick visual check for the fixture it depends on."""
@@ -82,8 +87,6 @@ def test_fourier_shift_in_jax(nd, shift):
     data = gen_phantom(nd)
     data_expected = fourier_shift_in_scipy(data, shift)
     data_actual = fourier_shift_in_jax(data, shift)
-    # _show(data_expected - data_actual)
-    # plt.show()
     assert jnp.allclose(data_expected, data_actual, atol=1e-5, rtol=1e-5)
 
 
@@ -162,6 +165,7 @@ def data__spatial_echo(shifts, request):
     )
 
 
+@interactive
 def test_data__spatial_echo_only(data__spatial_echo):
     """Just a check how the data are generated."""
     dat = data__spatial_echo
@@ -201,7 +205,7 @@ def data__spatial_echo_coil(shifts, request):
 
     data = jnp.expand_dims(data, coil_axis) * coil_profile
     # same as data[..., None] * coil_profile
-    if PLOT:
+    if INTERACTIVE:
         _, axes = plt.subplots(nrows=2, ncols=2, sharey=True, sharex=True)
         for ax_row, arr in zip(axes, [coil_profile, data]):
             for coil_idx, ax in enumerate(ax_row):
@@ -229,6 +233,7 @@ def data__spatial_echo_coil(shifts, request):
     )
 
 
+@interactive
 def test_data__spatial_echo_coil(data__spatial_echo_coil):
     """Just a check how the data are generated."""
     dat = data__spatial_echo_coil
@@ -295,6 +300,7 @@ def data__spatial_echo_batch(shifts, request):
     )
 
 
+@interactive
 def test_data__spatial_echo_batch(data__spatial_echo_batch):
     """Just a check how the data are generated."""
     dat = data__spatial_echo_batch
@@ -338,7 +344,7 @@ def data__spatial_echo_coil_batch(shifts, request):
 
     data = jnp.expand_dims(data, coil_axis) * coil_profile
     # same as data[..., None] * coil_profile
-    if PLOT:
+    if INTERACTIVE:
         _, axes = plt.subplots(nrows=2, ncols=2, sharey=True, sharex=True)
         for ax_row, arr in zip(axes, [coil_profile, data[1]]):
             for coil_idx, ax in enumerate(ax_row):
@@ -363,6 +369,7 @@ def data__spatial_echo_coil_batch(shifts, request):
     )
 
 
+@interactive
 def test_data__spatial_echo_coil_batch(data__spatial_echo_coil_batch):
     """Just a check how the data are generated."""
     dat = data__spatial_echo_coil_batch
