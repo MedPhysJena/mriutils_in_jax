@@ -7,16 +7,10 @@ import numpy as onp
 import typer
 from jaxtyping import Array, Float
 
-from mriutils_in_jax.register import register_complex_data
+from mriutils_in_jax.register import register_complex_data, ExecutionMode
 
 # don't show local variables as those contain large arrays
 app = typer.Typer(pretty_exceptions_show_locals=False)
-
-
-class ExecutionMode(str, Enum):
-    low_memory = "low_memory"
-    vectorized = "vectorized"
-    threaded = "threaded"
 
 
 def plot(shifts: Float[Array, "necho ndim"]):
@@ -36,7 +30,7 @@ def register_echos_cli(
     output_base: Path,
     axis: int = -1,
     coil_axis: int | None = None,
-    mode: ExecutionMode = "low_memory",
+    mode: ExecutionMode = ExecutionMode.low_memory,
     compress: bool = False,
     plot_shifts: bool = True,
 ):

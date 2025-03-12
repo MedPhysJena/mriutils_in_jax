@@ -1,4 +1,4 @@
-from typing import Literal, get_args
+from enum import Enum
 
 import jax
 import jax.numpy as jnp
@@ -9,8 +9,11 @@ from tqdm import trange
 
 from mriutils_in_jax.utils import grid_basis, take, update_axis_after_indexing
 
-ExecutionMode = Literal["vectorized", "threaded", "low_memory"]
-MODES = list(get_args(ExecutionMode))
+
+class ExecutionMode(str, Enum):
+    low_memory = "low_memory"
+    vectorized = "vectorized"
+    threaded = "threaded"
 
 
 def fourier_shift(
@@ -93,7 +96,7 @@ def identify_necessary_shifts(
     ref: int = -1,
     axis: int = -1,
     upsample_factor: int = 100,
-    execution_mode: ExecutionMode = "low_memory",
+    execution_mode: ExecutionMode = ExecutionMode.low_memory,
     combine_fn=lambda x: x,
 ) -> Float[Array, "nvol ndim"]:
     """
@@ -153,9 +156,9 @@ def identify_necessary_shifts(
       In my limited testing, I observed that forcing the device count to the max number
       proves marginally more beneficial than setting it to the exact number of echoes.
     """
-    if execution_mode not in MODES:
+    if execution_mode not in ExecutionMode:
         raise ValueError(
-            f"Invalid execution_mode {execution_mode!r}. Choose one of {MODES}."
+            f"Invalid execution_mode {execution_mode!r}. Choose one of {ExecutionMode}."
         )
     if execution_mode == "threaded":
         import multiprocessing
@@ -206,7 +209,7 @@ def register_complex_data(
     phase,
     axis_echo: int = -2,
     axis_coil: int | None = -1,
-    execution_mode: ExecutionMode = "low_memory",
+    execution_mode: ExecutionMode = ExecutionMode.low_memory,
 ) -> tuple[Complex[Array, "..."], Float[Array, "necho ndim"]]:
     """Register (and shift) subvolumes along specified axis.
 
@@ -249,9 +252,9 @@ def register_complex_data(
       `XLA_FLAGS="--xla_force_host_platform_device_count=16"` (or whatever number of
       threads. You can use `os.environ` but it must be done before jax is imported)
     """
-    if execution_mode not in MODES:
+    if execution_mode not in ExecutionMode:
         raise ValueError(
-            f"Invalid execution_mode {execution_mode!r}. Choose one of {MODES}."
+            f"Invalid execution_mode {execution_mode!r}. Choose one of {ExecutionMode}."
         )
 
     if magn.shape != phase.shape:
