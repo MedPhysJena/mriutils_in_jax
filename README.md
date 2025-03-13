@@ -7,7 +7,7 @@ Meant for some helpful utils and functions
 To install a specific tag / release directly from git:
 
 ```sh
-pip install git+https://github.com/MedPhysJena/mriutils_in_jax.git@v0.2.5
+pip install git+https://github.com/MedPhysJena/mriutils_in_jax.git@v0.2.6
 ```
 
 You can omit the tag at the end (i.e. drop `@v0.2.5`) to checkout and install the current commit.
