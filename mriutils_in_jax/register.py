@@ -289,6 +289,9 @@ def register_complex_data(
             f"phase must be scaled to [-π,π], got [{phase_min, phase_max}]"
         )
 
+    # cast negative axis value to a positive (pmap requires)
+    axis_echo = axis_echo % magn.ndim
+
     ## Step 1: identify how much to shift
     # using dataobj allows to read directly into jax, skipping nibabel's cache
 
