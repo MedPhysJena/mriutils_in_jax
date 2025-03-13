@@ -92,7 +92,7 @@ def register_echoes_with_io(
         execution_mode=mode,
     )
 
-    _aux_output_path = tweak(inputs.magn, postfix="shifts_to_last_echo")
+    _aux_output_path = tweak(outputs.magn, postfix="-shifts_to_last_echo", suffix="")
     if plot_shifts:
         plot(shifts)
         plt.savefig(_aux_output_path.with_suffix(".png"))
