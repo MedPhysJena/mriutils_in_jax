@@ -31,11 +31,11 @@ class ComplexDataPaths(BaseModel):
     phase: Path
 
     def exist(self) -> bool:
-        return self.magn.exists() and self.phase.exists()
+        return self.magn.is_file() and self.phase.is_file()
 
     def make_parent_dirs(self, exist_ok=True, parents=True) -> None:
-        self.magn.mkdir(exist_ok=exist_ok, parents=parents)
-        self.phase.mkdir(exist_ok=exist_ok, parents=parents)
+        self.magn.parent.mkdir(exist_ok=exist_ok, parents=parents)
+        self.phase.parent.mkdir(exist_ok=exist_ok, parents=parents)
 
     def load(self) -> tuple[nib.nifti1.Nifti1Image, nib.nifti1.Nifti1Image]:
         return nib.nifti1.load(self.magn), nib.nifti1.load(self.phase)
