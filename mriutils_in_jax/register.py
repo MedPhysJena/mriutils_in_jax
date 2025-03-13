@@ -112,8 +112,8 @@ def identify_necessary_shifts(
         falling back to vmap.
 
     Additionally, once the data is loaded in the memory, an optional `combine_fn`
-    is applied which may further reduce the data size (e.g. by applying SoS channel
-    combination)
+    is applied over `combine_axes` which may further reduce the data size
+    (e.g. by applying SoS channel combination)
 
     Parameters
     ----------
@@ -131,9 +131,10 @@ def identify_necessary_shifts(
         within 1/20th of a pixel. The default (100) may be overly zealous.
     execution_mode : str, default = "vectorized"
         Execution mode: one of "low_memory", "vectorized", or "threaded".
-    combine_fn : Callable
+    combine_fn : Callable[[Array], Array]
         Optional function, mapping array to an array, to reduce dimensions that are
         irrelevant for registration, e.g. by applying a channel combination.
+        Note, that it must operate on _indexed_ arrays, i.e. with ndim of array.ndim - 1
 
     Returns
     -------
@@ -168,39 +169,42 @@ def identify_necessary_shifts(
             f"--xla_force_host_platform_device_count={multiprocessing.cpu_count()}"
         )
 
-    # [ref] here and [idx] below (as opposed to ref and idx) preserve the singleton
-    # axis dimension, allowing combine_fn to remain correct
-    reference = combine_fn(take(array, indices=[ref], axis=axis)).squeeze()
     axis = axis % array.ndim  # pmap requires non-negative integers
+    # combine_fn must be able to operate on a single echo array / subvolume
+    reference = combine_fn(take(array, indices=ref, axis=axis))
 
+    @jax.jit
     def identify_necessary_shifts_in_single_vol(
         moving: Float[Array, "..."],
     ) -> Float[Array, " ndim"]:
-        """Compute the shift required to align a given volume with the reference."""
+        """Compute the shift required to align a given volume with the reference.
+
+        Compile combine_fn into this function directly.
+        """
         return phase_cross_correlation(
-            reference, moving, upsample_factor=upsample_factor
+            reference, combine_fn(moving), upsample_factor=upsample_factor
         )[0]
 
     # Choose the processing strategy based on the execution_mode.
     if execution_mode == "low_memory":
-        # Process one volume at a time using a comprehension
-        # onp.take loads the subvolume in the memory.
+        # Process one volume at a time using a comprehension (thanks to `take`)
         shifts = [
-            identify_necessary_shifts_in_single_vol(
-                combine_fn(take(array, indices=[idx], axis=axis)).squeeze()
-            )
+            identify_necessary_shifts_in_single_vol(take(array, indices=idx, axis=axis))
             for idx in trange(
                 array.shape[axis], position=1, leave=False, desc="Processing volumes"
             )
         ]
         return jnp.stack(shifts, axis=0)
 
+    # In parallel execution the entire data is loaded first.
+    # The innate mechanism of {v,p}map squeezes `axis` out and combine_fn inside
+    # identify_necessary_shifts_in_single_vol will operate on each subvolume
     if execution_mode == "threaded" and len(jax.devices()) > array.shape[axis]:
         jmap = jax.pmap
     else:
         jmap = jax.vmap
     return jmap(identify_necessary_shifts_in_single_vol, in_axes=axis, out_axes=0)(
-        combine_fn(jnp.array(array))
+        jnp.array(array)
     )
 
 
@@ -280,15 +284,24 @@ def register_complex_data(
 
     ## Step 1: identify how much to shift
     # using dataobj allows to read directly into jax, skipping nibabel's cache
+
+    if axis_coil is None:
+
+        def combine_fn(x):
+            return x
+    else:
+        axis_coil_after_echo_is_indexed = update_axis_after_indexing(
+            ndim=magn.ndim, target=axis_coil, removed=axis_echo
+        )
+
+        def combine_fn(x):
+            return jnp.sum(x**2, axis=axis_coil_after_echo_is_indexed) ** 0.5
+
     shifts = identify_necessary_shifts(
         magn,
         axis=axis_echo,
         execution_mode=execution_mode,
-        # identify_necessary_shifts takes care to call this function
-        # on arrays where axis_coil still means the same (see identify_necessary_shifts)
-        combine_fn=jax.jit(lambda x: jnp.sum(x**2, axis=axis_coil) ** 0.5)
-        if axis_coil is not None
-        else lambda x: x,
+        combine_fn=combine_fn,
     )
 
     ## Step 2: shift in Fourier space
@@ -311,9 +324,6 @@ def register_complex_data(
     if axis_coil is None:
         shift = fourier_shift  # will shift the entire array
     else:
-        axis_coil_after_echo_is_indexed = update_axis_after_indexing(
-            ndim=magn.ndim, target=axis_coil, removed=axis_echo
-        )
         # nesting pmap may be ill-advised. Plus N_channel < N_echo most of the time,
         # so I chose to use vmap here
         shift = jax.vmap(
