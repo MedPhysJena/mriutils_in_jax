@@ -17,7 +17,9 @@ from mriutils_in_jax.register import (
     register_complex_data,
     identify_necessary_shifts,
     fourier_shift as fourier_shift_in_jax,
+    ExecutionMode,
 )
+from mriutils_in_jax.utils import update_axis_after_indexing
 
 INTERACTIVE = False
 NVOL = 5
@@ -94,6 +96,11 @@ def test_fourier_shift_in_jax(nd, shift):
 ## test actual registration
 
 
+@pytest.fixture(params=list(ExecutionMode))
+def mode(request):
+    return request.param
+
+
 @pytest.fixture
 def shifts():
     """Shifts used to generate synthetic data."""
@@ -111,7 +118,7 @@ class DataDef:
     echo_axis: int
     spatial_axes: tuple[int, ...]
     batch_axes: tuple[int, ...]
-    reduce_axes: tuple[int, ...]
+    coil_axis: int | None = None
 
 
 @pytest.fixture(params=["jax", "numpy", "arrayproxy"])
@@ -171,7 +178,7 @@ def data__spatial_echo(shifts, request):
         echo_axis=echo_axis,
         spatial_axes=spatial_axes,
         batch_axes=(),
-        reduce_axes=(),
+        coil_axis=None,
     )
 
 
@@ -189,11 +196,11 @@ def test_data__spatial_echo_only(data__spatial_echo):
     plt.show()
 
 
-def test_registration__spatial_echo_only(data__spatial_echo, shifts, cast_to):
+def test_registration__spatial_echo_only(data__spatial_echo, shifts, cast_to, mode):
     """Just a check how the data are generated."""
     dat = data__spatial_echo
     shifts_recovered = identify_necessary_shifts(
-        cast_to(dat.observed), axis=dat.echo_axis
+        cast_to(dat.observed), axis=dat.echo_axis, execution_mode=mode
     )
     assert jnp.allclose(
         shifts[:, : dat.orig.ndim] + shifts_recovered, 0, atol=0.1, rtol=0.1
@@ -201,12 +208,15 @@ def test_registration__spatial_echo_only(data__spatial_echo, shifts, cast_to):
 
 
 @pytest.fixture(params=[1, 2, 3])
-def data__spatial_echo_coil(shifts, request):
-    """Generate data with spatial, echo, and coil dims."""
-    nd = request.param
-    coil_axis = -1
-    echo_axis = -2
+def _data__spatial_echo_coil(shifts, request):
+    """Generate data with spatial, coil, and echo dims.
 
+    Order of the axes is fixed and defined by the construction:
+    spatial, coil, echo
+    """
+    nd = request.param
+
+    spatial_axes = tuple(range(nd))
     spatial_data = gen_phantom(nd)
     basis = grid_basis(spatial_data.shape)
     centre_ = jnp.array([0.5] * nd)
@@ -216,45 +226,46 @@ def data__spatial_echo_coil(shifts, request):
     coil_profile = (coil_profile.max() - coil_profile) / coil_profile.max()
     assert coil_profile.shape == spatial_data.shape + (NSOS,)
 
-    single_echo_data = jnp.expand_dims(spatial_data, coil_axis) * coil_profile
-    # more general version of `spatial_data[..., None] * coil_profile`
+    single_echo_data = spatial_data[..., None] * coil_profile
     if INTERACTIVE:
         _, axes = plt.subplots(nrows=2, ncols=2, sharey=True, sharex=True)
         for ax_row, arr in zip(axes, [coil_profile, single_echo_data]):
             for coil_idx, ax in enumerate(ax_row):
-                _show(arr.take(coil_idx, coil_axis), ax)
+                _show(arr.take(coil_idx, -1), ax)
         plt.show()
 
     multi_echo_data = jnp.stack(
         [
-            fourier_shift_in_jax(
-                single_echo_data,
-                shift,
-                axes=tuple(
-                    a
-                    for a in range(single_echo_data.ndim)
-                    if a != (coil_axis % single_echo_data.ndim)
-                ),
-            )
+            fourier_shift_in_jax(single_echo_data, shift, axes=spatial_axes)
             for shift in shifts[:, :nd]
         ],
-        axis=echo_axis,
+        axis=-1,
     )
-    nonneg_echo_axis = echo_axis % multi_echo_data.ndim
-    nonneg_coil_axis = coil_axis % multi_echo_data.ndim
-    spatial_axes = tuple(
-        a
-        for a in range(multi_echo_data.ndim)
-        if a not in [nonneg_coil_axis, nonneg_echo_axis]
-    )
+    assert multi_echo_data.shape == spatial_data.shape + (NSOS, len(shifts))
+
     return DataDef(
         orig=single_echo_data,
         observed=multi_echo_data,
-        echo_axis=echo_axis,
+        echo_axis=-1,
         spatial_axes=spatial_axes,
         batch_axes=(),
-        reduce_axes=(coil_axis,),
+        coil_axis=-2,
     )
+
+
+@pytest.fixture(params=[False, True])
+def data__spatial_echo_coil(_data__spatial_echo_coil, request):
+    """Fixture which returns data with two permutations of axes:
+    permute=False: coil=-2, echo=-1
+    permute=True: coil=-1, echo=-2
+    """
+    permute = request.param
+    data = _data__spatial_echo_coil
+    if permute:
+        data.observed = jnp.swapaxes(data.observed, -1, -2)
+        data.echo_axis = -2
+        data.coil_axis = -1
+    return data
 
 
 @interactive
@@ -278,7 +289,28 @@ def test_data__spatial_echo_coil(data__spatial_echo_coil):
     plt.show()
 
 
-def test_registration__spatial_echo_coil(data__spatial_echo_coil, shifts, cast_to):
+def test_identification__spatial_echo_only(
+    data__spatial_echo_coil, shifts, cast_to, mode
+):
+    """Just a check how the data are generated."""
+    dat = data__spatial_echo_coil
+    _axis_coil_after_indexing_echo = update_axis_after_indexing(
+        dat.observed.ndim, target=dat.coil_axis, removed=dat.echo_axis
+    )
+    shifts_recovered = identify_necessary_shifts(
+        cast_to(dat.observed),
+        axis=dat.echo_axis,
+        execution_mode=mode,
+        combine_fn=lambda x: jnp.sum(x**2, axis=_axis_coil_after_indexing_echo) ** 0.5,
+    )
+    assert jnp.allclose(
+        shifts[:, : shifts_recovered.shape[1]] + shifts_recovered, 0, atol=0.1, rtol=0.1
+    )
+
+
+def test_registration__spatial_echo_coil(
+    data__spatial_echo_coil, shifts, cast_to, mode
+):
     """Test registration in the presence of multiple channels."""
     dat = data__spatial_echo_coil
     phase = jr.uniform(
@@ -288,9 +320,10 @@ def test_registration__spatial_echo_coil(data__spatial_echo_coil, shifts, cast_t
         magn=cast_to(dat.observed),
         phase=cast_to(phase),
         axis_echo=dat.echo_axis,
-        axis_coil=dat.reduce_axes[0],
+        axis_coil=dat.coil_axis,
+        execution_mode=mode,
     )
 
     assert jnp.allclose(
-        shifts[:, : dat.orig.ndim - 1] + shifts_recovered, 0, atol=0.1, rtol=0.1
+        shifts[:, : shifts_recovered.shape[1]] + shifts_recovered, 0, atol=0.1, rtol=0.1
     )

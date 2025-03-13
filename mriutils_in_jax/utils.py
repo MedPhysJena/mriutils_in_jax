@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import jax.numpy as jnp
 import numpy as onp
 from jaxtyping import Array, ArrayLike, Float
@@ -75,3 +77,11 @@ def update_axis_after_indexing(ndim: int, target: int, removed: int):
     if target > removed:
         return target - 1
     return target
+
+
+def tweak(path: Path, postfix: str = "", suffix: str | None = None) -> Path:
+    full_extension = "".join(path.suffixes)
+    new_basename = path.name.rstrip(full_extension) + postfix
+    if suffix is None:
+        suffix = full_extension
+    return (path.parent / new_basename).with_suffix(suffix)
