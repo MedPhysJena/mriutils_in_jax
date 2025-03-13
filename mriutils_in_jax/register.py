@@ -266,6 +266,13 @@ def register_complex_data(
             "Specified niftis have incompatible shapes: "
             f"{magn.shape=} != {phase.shape=}"
         )
+    _n_spatial_dims = magn.ndim-1 -(0 if axis_coil is None else 1 )
+    if _n_spatial_dims>3:
+        raise ValueError(
+            f"Unexpected number of dimensions: {magn.shape=}, {axis_echo=}, {axis_coil=}. " 
+            "Currently supports only up to 3 spatial dims"
+        )
+
 
     # convert numpy array to jax immediately as it is already in memory, but
     # _certainly_ don't do that with ArrayProxy, as it would load it all in memory

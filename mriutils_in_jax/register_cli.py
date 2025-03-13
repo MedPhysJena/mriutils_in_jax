@@ -150,7 +150,7 @@ def register_echoes_cli(
       In my limited testing, I observed that forcing the device count to the max number
       proves marginally more beneficial than setting it to the exact number of echoes.
     """
-    suffix = "nii.gz" if compress else "nii"
+    suffix = ".nii.gz" if compress else ".nii"
     return register_echoes_with_io(
         inputs=ComplexDataPaths(magn=magn, phase=phase),
         outputs=ComplexDataPaths(
