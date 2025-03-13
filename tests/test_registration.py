@@ -17,6 +17,7 @@ from mriutils_in_jax.register import (
     register_complex_data,
     identify_necessary_shifts,
     fourier_shift as fourier_shift_in_jax,
+    ExecutionMode,
 )
 
 INTERACTIVE = False
@@ -92,6 +93,11 @@ def test_fourier_shift_in_jax(nd, shift):
 
 
 ## test actual registration
+
+
+@pytest.fixture(params=list(ExecutionMode))
+def mode(request):
+    return request.param
 
 
 @pytest.fixture
@@ -189,11 +195,11 @@ def test_data__spatial_echo_only(data__spatial_echo):
     plt.show()
 
 
-def test_registration__spatial_echo_only(data__spatial_echo, shifts, cast_to):
+def test_registration__spatial_echo_only(data__spatial_echo, shifts, cast_to, mode):
     """Just a check how the data are generated."""
     dat = data__spatial_echo
     shifts_recovered = identify_necessary_shifts(
-        cast_to(dat.observed), axis=dat.echo_axis
+        cast_to(dat.observed), axis=dat.echo_axis, execution_mode=mode
     )
     assert jnp.allclose(
         shifts[:, : dat.orig.ndim] + shifts_recovered, 0, atol=0.1, rtol=0.1
@@ -278,7 +284,9 @@ def test_data__spatial_echo_coil(data__spatial_echo_coil):
     plt.show()
 
 
-def test_registration__spatial_echo_coil(data__spatial_echo_coil, shifts, cast_to):
+def test_registration__spatial_echo_coil(
+    data__spatial_echo_coil, shifts, cast_to, mode
+):
     """Test registration in the presence of multiple channels."""
     dat = data__spatial_echo_coil
     phase = jr.uniform(
@@ -289,6 +297,7 @@ def test_registration__spatial_echo_coil(data__spatial_echo_coil, shifts, cast_t
         phase=cast_to(phase),
         axis_echo=dat.echo_axis,
         axis_coil=dat.reduce_axes[0],
+        execution_mode=mode,
     )
 
     assert jnp.allclose(
