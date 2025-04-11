@@ -5,11 +5,14 @@ import jax.numpy as jnp
 import jaxopt
 import matplotlib.pyplot as plt
 import nibabel as nib
+import numpyro
+import numpyro.distributions as dist
 import typer
 from jax import jit, lax
 from jaxtyping import Array, Float
 from loguru import logger
 from matplotlib.colors import Normalize, TwoSlopeNorm
+from numpyroutils import run_svi
 
 from mriutils_in_jax.loader import Loaded
 from mriutils_in_jax.utils import grid_basis
@@ -90,6 +93,21 @@ def loss(
         # magn * jnp.sin(0.5 * (predict_constant_phase_offset(coefs, te) - phase))
         magn * jnp.sin(0.5 * (predict_phase_offset(coefs, te, basis) - phase))
     )
+
+
+def model(te, basis, weights=1.0):
+    phi0 = numpyro.sample("phi0", dist.TruncatedNormal(0, 1, low=-jnp.pi, high=jnp.pi))
+    freq = numpyro.sample("freq0", dist.Normal(0, 1).expand((1 + basis.shape[-1],)))
+    global_conc = numpyro.sample("global-conc", dist.TruncatedNormal(3.0, 1.0, low=0.0))
+
+    phase_offset_predicted = phi0 + (freq[0] + basis @ freq[1:])[..., None] * te
+    with numpyro.plate("echo", te.size):
+        with numpyro.plate_stack("spatial", basis.shape[:-1], rightmost_dim=-2):
+            with numpyro.handlers.mask(mask=weights > 0):
+                numpyro.sample(
+                    "offset",
+                    dist.VonMises(phase_offset_predicted, global_conc * weights),
+                )
 
 
 def plot_comparison(
@@ -224,10 +242,16 @@ def main(
     init_params = jnp.array([0.0, 0.0] + [0.0] * (phase_offset.ndim - 1))
 
     logger.debug("Running the optimisation")
-    opt = jaxopt.LBFGS(loss, maxiter=25)
-    result = opt.run(
-        init_params, te, grid_basis(phase_offset.shape[:-1]), phase_offset, weights
+    basis = grid_basis(phase_offset.shape[:-1]) / 2
+    result, svi = run_svi(
+        numpyro.handlers.condition(model, {"offset": phase_offset}),
+        te=te,
+        basis=basis,
+        weights=weights,
     )
+    __import__("ipdb").set_trace()
+    opt = jaxopt.LBFGS(loss, maxiter=25)
+    result = opt.run(init_params, te, basis, phase_offset, weights)
     logger.debug("Completed after {} iterations", result[1].iter_num.item())
     del weights
     logger.debug("Applying the optimal correction")
