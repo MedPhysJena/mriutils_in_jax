@@ -29,7 +29,7 @@ def downsample_mean(
     )
     if jnp.any(jnp.array(_shape) - jnp.array(_shape).astype(int)).item():
         raise ValueError(
-            f"Rounding error when applying {factor=} to {array.shape}: " f"{_shape}"
+            f"Rounding error when applying {factor=} to {array.shape}: {_shape}"
         )
     window_shape = tuple(factor if ax in axes else 1 for ax in range(array.ndim))
 
@@ -144,7 +144,7 @@ def main(
     sel: str = "",
     factor: int = 5,
     check_phase: bool = True,
-    plot_hist:bool = True,
+    plot_hist: bool = True,
 ):
     nifti_suffix = "".join(moving_phase.suffixes)  # can be .nii or .nii.gz
     if output_basename is None:
@@ -182,8 +182,7 @@ def main(
         )
     if ref.shape[-1] != te.size:
         raise ValueError(
-            f"Provided number of TE ({te.size}) does not match "
-            f"the data {ref.shape[-1]}"
+            f"Provided number of TE ({te.size}) does not match the data {ref.shape[-1]}"
         )
     logger.debug("Downsampling the phase offset")
     magn_downsampled = downsample_mean(
