@@ -12,7 +12,7 @@ from jax import jit, lax
 from jaxtyping import Array, Float
 from loguru import logger
 from matplotlib.colors import Normalize, TwoSlopeNorm
-from numpyroutils import run_svi
+from numpyrotils import run_svi
 
 from mriutils_in_jax.loader import Loaded
 from mriutils_in_jax.utils import grid_basis
@@ -97,10 +97,12 @@ def loss(
 
 def model(te, basis, weights=1.0):
     phi0 = numpyro.sample("phi0", dist.TruncatedNormal(0, 1, low=-jnp.pi, high=jnp.pi))
-    freq = numpyro.sample("freq0", dist.Normal(0, 1).expand((1 + basis.shape[-1],)))
-    global_conc = numpyro.sample("global-conc", dist.TruncatedNormal(3.0, 1.0, low=0.0))
+    freq0 = numpyro.sample("freq0", dist.Normal(0, 1))
+    with numpyro.plate("grad_comp", basis.shape[-1]):
+        dfreq = numpyro.sample("dfreq", dist.Normal(0, 1))
+    global_conc = numpyro.sample("global-conc", dist.TruncatedNormal(10.0, 3.0, low=0.0))
 
-    phase_offset_predicted = phi0 + (freq[0] + basis @ freq[1:])[..., None] * te
+    phase_offset_predicted = phi0 + (freq0 + basis @ dfreq)[..., None] * te
     with numpyro.plate("echo", te.size):
         with numpyro.plate_stack("spatial", basis.shape[:-1], rightmost_dim=-2):
             with numpyro.handlers.mask(mask=weights > 0):
@@ -238,31 +240,33 @@ def main(
     )
     del ref.magn, moving.magn, mask_fg
 
-    # param_init = np.polyfit(te, resid_mean["phase_unwrpd"].sel(rep=rep_idx).data, 1)
-    init_params = jnp.array([0.0, 0.0] + [0.0] * (phase_offset.ndim - 1))
-
     logger.debug("Running the optimisation")
-    basis = grid_basis(phase_offset.shape[:-1]) / 2
+    basis_downsampled = grid_basis(phase_offset.shape[:-1]) / 2
     result, svi = run_svi(
         numpyro.handlers.condition(model, {"offset": phase_offset}),
         te=te,
-        basis=basis,
+        basis=basis_downsampled,
         weights=weights,
     )
-    __import__("ipdb").set_trace()
-    opt = jaxopt.LBFGS(loss, maxiter=25)
-    result = opt.run(init_params, te, basis, phase_offset, weights)
-    logger.debug("Completed after {} iterations", result[1].iter_num.item())
+
+    def predict_from_result(params: dict, te, basis):
+        return (
+            params["phi0_auto_loc"]
+            + te
+            * (params["freq0_auto_loc"] + basis @ params["dfreq_auto_loc"])[
+                ..., None
+            ]
+        )
+
     del weights
     logger.debug("Applying the optimal correction")
-    # predicted = predict_constant_phase_offset(result[0], te)
     phase_offset_corrected = jnp.angle(
         jnp.exp(
             1j
             * (
                 phase_offset
-                - predict_phase_offset(
-                    result[0], te, grid_basis(phase_offset.shape[:-1])
+                - predict_from_result(
+                    result[0], te, basis_downsampled
                 )
             )
         )
@@ -272,7 +276,7 @@ def main(
             1j
             * (
                 moving.phase
-                - predict_phase_offset(result[0], te, grid_basis(moving.shape[:-1]))
+                - predict_from_result(result[0], te, grid_basis(moving.shape[:-1]) / 2)
             )
         )
     )
@@ -294,7 +298,19 @@ def main(
         moving.img.affine,
         moving.img.header,
     ).to_filename(output_phase)
-    output_coeff.write_text(json.dumps(result[0].tolist()))
+    output_coeff.write_text(
+        json.dumps(
+            {k.replace("_auto_loc", ""): v.tolist() for k, v in result[0].items()}
+        )
+    )
+    plt.plot(result.losses)
+    plt.xlabel("Iteration number")
+    plt.ylabel("Loss")
+    plt.savefig(
+        output_basename.parent / f"{output_basename.name}-loss.png",
+    )
+    plt.close()
+
 
 
 if __name__ == "__main__":
