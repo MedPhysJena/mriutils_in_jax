@@ -17,7 +17,7 @@ dev = ["pytest", "yaslp @ git+https://github.com/medphysjena/yaslp.git@v0.2.0"]
 cli = ["braceexpand", "nibabel", "typer"]
 io = ["nibabel"]
 registration = ["skimage_in_jax @ git+https://github.com/Sibgatulin/skimage_in_jax.git@v0.1.1"]
-phase_corr = ["jaxopt"]
+phase_corr = ["numpyrotils @ git+https://github.com/Sibgatulin/numpyrotils"]
 gpu = ["jax[cuda]==0.4.35"]
 all = [
   "braceexpand",
