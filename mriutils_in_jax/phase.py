@@ -284,7 +284,6 @@ def correct_repetition_phase(
             label="posterior pred",
         )
         ax_col[1].grid()
-        ax_col[1].legend(ncol=3)
 
         ax_col[2].plot(
             te, jnp.unwrap(_sel_phase_avg["obs"][idx_col]), marker=".", c="k"
@@ -293,6 +292,7 @@ def correct_repetition_phase(
             te, jnp.unwrap(_sel_phase_avg["posterior_pred"][idx_col]), c="C1"
         )
         ax_col[2].grid()
+    axes[1, 1].legend() # HACK: because 0 or -1 columns can be empty
 
     plt.savefig(
         output_basename.parent / f"{output_basename.name}-offset_over_te.png",
