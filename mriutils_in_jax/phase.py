@@ -119,7 +119,7 @@ def correct_repetition_phase(
     moving_phase: Path,
     reference_magn: Path,
     reference_phase: Path,
-    header: Path,
+    te: list[float],
     output_basename: Path | None = None,
     axis_echo: int = -1,
     mask_fg_threshold: float | None = 0.3,
@@ -137,8 +137,7 @@ def correct_repetition_phase(
     output_phase = output_basename.with_suffix(nifti_suffix)
     output_coeff = output_basename.with_suffix(".coefs")
 
-    with open(header) as f:
-        te = jnp.array(json.load(f)["echoTime"])
+    te = jnp.array(te)
     logger.debug("Loading the reference images")
     ref = Loaded(
         reference_magn,
