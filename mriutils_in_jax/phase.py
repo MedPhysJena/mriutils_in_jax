@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import jax.numpy as jnp
+import jax.random as jr
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpyro
@@ -10,6 +11,7 @@ from jax import lax
 from jaxtyping import Array, ArrayLike, Complex, Float
 from loguru import logger
 from matplotlib.colors import Normalize, TwoSlopeNorm
+from matplotlib.patches import Rectangle
 from numpyrotils import run_svi
 
 from mriutils_in_jax.loader import Loaded
@@ -192,23 +194,112 @@ def correct_repetition_phase(
         plt.savefig(
             output_basename.parent / f"{output_basename.name}-hist.png",
         )
+        plt.close()
+
     phase_offset = jnp.where(mask_fg, jnp.angle(complex_downsampled), 0)
+    basis_downsampled = grid_basis(phase_offset.shape[:-1]) / 2
+    logger.debug("Plot the weights")
     weights = jnp.where(mask_fg, magn_downsampled, 0)
     plot_comparison(
         [weights],
         filename_png=output_basename.parent / f"{output_basename.name}-weights.png",
         phase_cmap=False,
     )
-    del ref.magn, moving.magn, mask_fg
+    del ref.magn, moving.magn
 
     logger.debug("Running the optimisation")
-    basis_downsampled = grid_basis(phase_offset.shape[:-1]) / 2
-    result, _ = run_svi(
+    result, svi = run_svi(
         numpyro.handlers.condition(model, {"offset": phase_offset}),
         te=te,
         basis=basis_downsampled,
         weights=weights,
     )
+
+    logger.debug("Sampling prior predictive")
+    phase_offset_prior_pred = jnp.moveaxis(
+        numpyro.infer.Predictive(model, num_samples=20)(
+            jr.PRNGKey(0), te=te, basis=basis_downsampled, weights=weights
+        )["offset"],
+        0,  # sample axis (size is 20)
+        -1,
+    )
+
+    logger.debug("Sampling posterior predictive")
+    phase_offset_post_pred = numpyro.infer.Predictive(
+        model, num_samples=1, guide=svi.guide, params=result.params
+    )(jr.PRNGKey(0), te=te, basis=basis_downsampled, weights=weights)["offset"][0]
+
+    logger.debug("Plot offset over echoes with prior and posterior predictives")
+    ncol = 6
+    whsz = 10
+    indices = jnp.linspace(0, phase_offset.shape[0], ncol).astype(int)
+    _lims = tuple(
+        (int(sz / 2) - whsz, int(sz / 2) + whsz) for sz in phase_offset.shape[1:-1]
+    )
+    slices = tuple(slice(*sl) for sl in _lims)
+    _sel_phase_avg = {}
+    for key, array in zip(
+        ["obs", "prior_pred", "posterior_pred"],
+        [
+            jnp.where(mask_fg, phase_offset, jnp.nan),
+            phase_offset_prior_pred,
+            phase_offset_post_pred,
+        ],
+    ):
+        _sel_phase_offset = array[indices][(slice(None),) + slices]
+        _sel_phase_avg[key] = jnp.angle(
+            jnp.nanmean(jnp.exp(1j * _sel_phase_offset), (1, 2))
+        )
+
+    _, axes = plt.subplots(
+        nrows=3, ncols=ncol, sharex="row", sharey="row", figsize=(25, 12)
+    )
+    for idx_col, (ax_col, idx_in_orig_space) in enumerate(
+        zip(axes.T, indices.tolist())
+    ):
+        ax_col[0].imshow(
+            phase_offset[idx_in_orig_space, ..., -1],
+            norm=TwoSlopeNorm(0, vmin=-jnp.pi, vmax=jnp.pi),
+            cmap="RdBu_r",
+        )
+        p = Rectangle(
+            (_lims[0][0], _lims[1][0]), 2 * whsz, 2 * whsz, fc="none", ec="C2"
+        )
+        ax_col[0].add_patch(p)
+        ax_col[1].plot(
+            te, _sel_phase_avg["obs"][idx_col], marker=".", c="k", label="observed"
+        )
+        ax_col[1].plot(
+            te,
+            _sel_phase_avg["prior_pred"][idx_col][:, 0],
+            c="grey",
+            alpha=0.5,
+            label="prior pred",
+        )
+        ax_col[1].plot(te, _sel_phase_avg["prior_pred"][idx_col], c="grey", alpha=0.5)
+        ax_col[1].plot(
+            te,
+            _sel_phase_avg["posterior_pred"][idx_col],
+            c="C1",
+            label="posterior pred",
+        )
+        ax_col[1].grid()
+        ax_col[1].legend(ncol=3)
+
+        ax_col[2].plot(
+            te, jnp.unwrap(_sel_phase_avg["obs"][idx_col]), marker=".", c="k"
+        )
+        ax_col[2].plot(
+            te, jnp.unwrap(_sel_phase_avg["posterior_pred"][idx_col]), c="C1"
+        )
+        ax_col[2].grid()
+
+    plt.savefig(
+        output_basename.parent / f"{output_basename.name}-offset_over_te.png",
+        bbox_inches="tight",
+        dpi=150,
+    )
+    plt.close()
 
     def predict_from_result(params: dict, te, basis):
         return (
@@ -224,14 +315,11 @@ def correct_repetition_phase(
             1j * (phase_offset - predict_from_result(result[0], te, basis_downsampled))
         )
     )
+    phase_offset_predicted_upsampled = predict_from_result(
+        result[0], te, grid_basis(moving.shape[:-1]) / 2
+    )
     phase_corrected = jnp.angle(
-        jnp.exp(
-            1j
-            * (
-                moving.phase
-                - predict_from_result(result[0], te, grid_basis(moving.shape[:-1]) / 2)
-            )
-        )
+        jnp.exp(1j * (moving.phase - phase_offset_predicted_upsampled))
     )
 
     logger.debug("Plotting the results")
@@ -256,6 +344,7 @@ def correct_repetition_phase(
             {k.replace("_auto_loc", ""): v.tolist() for k, v in result[0].items()}
         )
     )
+    plt.figure()
     plt.plot(result.losses)
     plt.xlabel("Iteration number")
     plt.ylabel("Loss")
