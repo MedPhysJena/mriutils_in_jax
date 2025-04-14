@@ -97,7 +97,7 @@ def plot_comparison(
     _, axes = plt.subplots(
         nrows=len(centre) * len(arrays),
         ncols=necho,
-        figsize=(5 * necho, 2 * len(centre) * len(arrays)),
+        figsize=(3 * necho, 1.2 * len(centre) * len(arrays)),
     )
     for idx_axis, idx_centre in enumerate(centre):
         for idx_te in range(necho):
@@ -107,8 +107,22 @@ def plot_comparison(
                     norm=norm,
                     cmap=cmap,
                 )
+    for idx_te, ax in enumerate(axes[0]):
+        ax.set_title(f"Echo #{idx_te}")
     for ax in axes.flat:
         ax.axis("off")
+
+    for offset, label in enumerate(["Phase offset", "Corrected"]):
+        for ax in axes[offset::2]:
+            ax.text(
+                -0.05,
+                0.5,
+                label,
+                va="center",
+                ha="right",
+                transform=axes[0, 0].transAxes,
+                rotation=90,
+            )
     cbar = plt.colorbar(im, ax=axes)
     cbar.ax.set_ylabel("Phase (rad)")
     if filename_png is not None:
@@ -231,9 +245,9 @@ def correct_repetition_phase(
     )(jr.PRNGKey(0), te=te, basis=basis_downsampled, weights=weights)["offset"][0]
 
     logger.debug("Plot offset over echoes with prior and posterior predictives")
-    ncol = 6
+    ncol = 5
     whsz = 10
-    indices = jnp.linspace(0, phase_offset.shape[0], ncol).astype(int)
+    indices = jnp.linspace(0, phase_offset.shape[0], ncol + 2).astype(int)[1:-1]
     _lims = tuple(
         (int(sz / 2) - whsz, int(sz / 2) + whsz) for sz in phase_offset.shape[1:-1]
     )
@@ -253,7 +267,7 @@ def correct_repetition_phase(
         )
 
     _, axes = plt.subplots(
-        nrows=3, ncols=ncol, sharex="row", sharey="row", figsize=(25, 12)
+        nrows=3, ncols=ncol, sharex="row", sharey="row", figsize=(20, 8)
     )
     for idx_col, (ax_col, idx_in_orig_space) in enumerate(
         zip(axes.T, indices.tolist())
@@ -267,6 +281,8 @@ def correct_repetition_phase(
             (_lims[0][0], _lims[1][0]), 2 * whsz, 2 * whsz, fc="none", ec="C2"
         )
         ax_col[0].add_patch(p)
+        ax_col[0].axis("off")
+        ax_col[0].set_title(f"Slice along readout: {idx_in_orig_space}")
         ax_col[1].plot(
             te, _sel_phase_avg["obs"][idx_col], marker=".", c="k", label="observed"
         )
@@ -293,7 +309,11 @@ def correct_repetition_phase(
             te, jnp.unwrap(_sel_phase_avg["posterior_pred"][idx_col]), c="C1"
         )
         ax_col[2].grid()
-    axes[1, 1].legend() # HACK: because 0 or -1 columns can be empty
+        ax_col[2].set_xlabel("TE (ms)")
+
+    axes[1, 0].legend()
+    axes[1, 0].set_ylabel("Phase, wrapped (rad)")
+    axes[2, 0].set_ylabel("Phase, unwrapped (rad)")
 
     plt.savefig(
         output_basename.parent / f"{output_basename.name}-offset_over_te.png",
