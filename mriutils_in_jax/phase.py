@@ -213,6 +213,7 @@ def correct_repetition_phase(
         te=te,
         basis=basis_downsampled,
         weights=weights,
+        learning_rate=1e-2,
     )
 
     logger.debug("Sampling prior predictive")
