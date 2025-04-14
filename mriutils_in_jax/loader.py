@@ -48,7 +48,7 @@ class Loaded:
             )
         if magn_scale == "percentile":
             logger.debug("Computing magnitude's 99th percentile")
-            self.scale = jnp.nanpercentile(magn, jnp.array(99))
+            self.scale = jnp.nanpercentile(jnp.take(magn, 0, axis=axis_echo), jnp.array(99))
         elif isinstance(magn_scale, float):
             self.scale = magn_scale
         else:
