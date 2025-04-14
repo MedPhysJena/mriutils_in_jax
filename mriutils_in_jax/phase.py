@@ -63,7 +63,7 @@ def model(te, basis, weights=1.0):
     with numpyro.plate("grad_comp", basis.shape[-1]):
         dfreq = numpyro.sample("dfreq", dist.Normal(0, 1))
     global_conc = numpyro.sample(
-        "global-conc", dist.TruncatedNormal(10.0, 3.0, low=0.0)
+        "global-conc", dist.TruncatedNormal(10.0, 3.0, low=1.0)
     )
 
     phase_offset_predicted = phi0 + (freq0 + basis @ dfreq)[..., None] * te
