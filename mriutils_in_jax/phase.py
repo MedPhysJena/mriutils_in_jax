@@ -113,14 +113,14 @@ def plot_comparison(
         ax.axis("off")
 
     for offset, label in enumerate(["Phase offset", "Corrected"]):
-        for ax in axes[offset::2]:
+        for ax in axes[offset::2, 0]:
             ax.text(
                 -0.05,
                 0.5,
                 label,
                 va="center",
                 ha="right",
-                transform=axes[0, 0].transAxes,
+                transform=ax.transAxes,
                 rotation=90,
             )
     cbar = plt.colorbar(im, ax=axes)
