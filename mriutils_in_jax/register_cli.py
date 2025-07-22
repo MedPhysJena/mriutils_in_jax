@@ -39,6 +39,8 @@ class ComplexDataPaths(BaseModel):
 
     def load(self) -> tuple[nib.nifti1.Nifti1Image, nib.nifti1.Nifti1Image]:
         return nib.nifti1.load(self.magn), nib.nifti1.load(self.phase)
+    def resolve(self) -> "ComplexDataPaths":
+        return self.__class__(magn=self.magn.resolve(), phase=self.phase.resolve())
 
 
 def register_echoes_with_io(
@@ -154,7 +156,7 @@ def register_echoes_cli(
     return register_echoes_with_io(
         inputs=ComplexDataPaths(magn=magn, phase=phase),
         outputs=ComplexDataPaths(
-            magn=tweak(output_base, postfix="-magn", suffix=suffix),
+            magn=tweak(output_base, postfix="-mag", suffix=suffix),
             phase=tweak(output_base, postfix="-phase", suffix=suffix),
         ),
         axis=axis,

@@ -282,6 +282,11 @@ def register_complex_data(
         phase = jnp.array(phase)
 
     # The following should error if there are NaNs, rather than FFT them silently
+    _finite_frac = onp.isfinite(magn).mean()
+    if _finite_frac < 1.0:
+        raise ValueError(
+            f"magn must be finite, found {1-_finite_frac:.2%} infinite values"
+        )
     phase_min, phase_max = onp.min(phase).item(), onp.max(phase).item()
     # Should I bother masking NaNs?
     if not (phase_min >= -onp.pi) and (phase_max <= onp.pi):
