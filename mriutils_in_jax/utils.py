@@ -3,6 +3,7 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as onp
 from jaxtyping import Array, ArrayLike, Float
+from loguru import logger
 
 
 def grid_basis(
