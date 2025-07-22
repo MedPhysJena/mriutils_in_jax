@@ -20,21 +20,22 @@ from mriutils_in_jax.utils import grid_basis
 
 def downsample_mean(
     array,
-    factor: int = 1,
-    axes: tuple[int, ...] | None = None,
+    factors: dict[int, int] | int = 1,
     fill_value: float = jnp.nan,
 ):
-    if axes is None:
-        axes = tuple(range(array.ndim))
+    if isinstance(factors, int):
+        factors = {ax: factors for ax in range(array.ndim)}
 
-    _shape = tuple(
-        sz / factor if ax in axes else sz for ax, sz in enumerate(array.shape)
+    resulting_shape = tuple(
+        sz / factors.get(ax, 1) for ax, sz in enumerate(array.shape)
     )
-    if jnp.any(jnp.array(_shape) - jnp.array(_shape).astype(int)).item():
+    if jnp.any(
+        jnp.array(resulting_shape) - jnp.array(resulting_shape).astype(int)
+    ).item():
         raise ValueError(
-            f"Rounding error when applying {factor=} to {array.shape}: {_shape}"
+            f"Rounding error when applying {factors=} to {array.shape}: {resulting_shape}"
         )
-    window_shape = tuple(factor if ax in axes else 1 for ax in range(array.ndim))
+    window_shape = tuple(factors.get(ax, 1) for ax in range(array.ndim))
 
     # window_shape should be (n, m, k)
     # strides should match window_shape for non-overlapping windows
@@ -140,7 +141,7 @@ def correct_repetition_phase(
     axis_echo: int = -1,
     mask_fg_threshold: float | None = 0.3,
     sel: str = "",
-    factor: int = 5,
+    factors: dict[int, int] | int = 5,
     check_phase: bool = True,
     plot_hist: bool = True,
 ):
@@ -184,13 +185,13 @@ def correct_repetition_phase(
     logger.debug("Downsampling the phase offset")
     magn_downsampled = downsample_mean(
         ref.magn + moving.magn,
-        factor=factor,
-        axes=tuple(range(ref.magn.ndim - 1)),
+        factors=factors,
+        axes=tuple(),
         fill_value=0.0,
     )
     complex_downsampled = downsample_mean(
         moving.complex / ref.complex,
-        factor=factor,
+        factors=factors,
         axes=tuple(range(ref.magn.ndim - 1)),
         fill_value=0.0,
     )
